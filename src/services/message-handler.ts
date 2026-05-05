@@ -39,7 +39,7 @@ export async function handleMessage(payload: ZulipWebhookPayload, env: Env): Pro
       env.ANTHROPIC_API_KEY
     );
 
-    await sendResponse(client, payload, result.response, logger);
+    await sendResponse(client, payload, env.ZULIP_BOT_EMAIL, result.response, logger);
     logger.log('request_complete', {
       total_duration_ms: Date.now(),
       iterations: result.iterations,
@@ -48,7 +48,7 @@ export async function handleMessage(payload: ZulipWebhookPayload, env: Env): Pro
     });
   } catch (e) {
     logger.error('message_processing_error', { error: String(e) });
-    await sendErrorMessage(client, payload, logger);
+    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger);
   } finally {
     clearTimeout(timeout);
     await removeThinkingReaction(client, payload.message.id, logger);

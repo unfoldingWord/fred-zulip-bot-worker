@@ -2,14 +2,23 @@ import type { ZulipClient } from '../zulip/client.js';
 import type { ZulipMessage } from '../zulip/types.js';
 import type { ZulipHistoryMessage } from './types.js';
 import type { RequestLogger } from '../../utils/logger.js';
+import { otherParticipantIds } from '../zulip/recipients.js';
+
+type Narrow = Array<{ operator: string; operand: string | number }>;
 
 export async function fetchHistory(
   client: ZulipClient,
   message: ZulipMessage,
+  botEmail: string,
   logger: RequestLogger,
   limit: number = 20
 ): Promise<ZulipHistoryMessage[]> {
-  const narrow = buildNarrow(message);
+  const narrow = buildNarrow(message, botEmail);
+  if (narrow === null) {
+    logger.log('history_fetch_skipped', { reason: 'no_other_participants' });
+    return [];
+  }
+
   const startMs = Date.now();
   logger.log('history_fetch_start', { narrow_type: narrow[0]?.operator });
 
@@ -39,7 +48,7 @@ export async function fetchHistory(
   return messages;
 }
 
-function buildNarrow(message: ZulipMessage): Array<{ operator: string; operand: string | number }> {
+function buildNarrow(message: ZulipMessage, botEmail: string): Narrow | null {
   if (message.type === 'stream' && message.stream_id !== undefined) {
     return [
       { operator: 'channel', operand: message.stream_id },
@@ -48,7 +57,8 @@ function buildNarrow(message: ZulipMessage): Array<{ operator: string; operand: 
   }
 
   if (Array.isArray(message.display_recipient)) {
-    const ids = message.display_recipient.map((u) => u.id).sort((a, b) => a - b);
+    const ids = otherParticipantIds(message, botEmail);
+    if (ids.length === 0) return null;
     return [{ operator: 'dm', operand: ids.join(',') }];
   }
 
