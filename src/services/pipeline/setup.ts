@@ -45,7 +45,7 @@ export function createPipelineContext(
     logger,
     client,
     orchestrationCtx,
-    threadKey: deriveThreadKey(payload.message),
+    threadKey: deriveThreadKey(payload.message, env.ZULIP_BOT_EMAIL),
     userMessage: payload.message.content,
   };
 }

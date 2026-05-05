@@ -13,6 +13,19 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('unfoldingWord');
   });
 
+  it('describes the v2 identity (Claude Sonnet, Fred MCP, BT Servant)', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('Fred Bot v2');
+    expect(prompt).toMatch(/claude sonnet/i);
+    expect(prompt).toContain('Fred MCP');
+    expect(prompt).toContain('BT Servant');
+  });
+
   it('includes tool catalog markdown', () => {
     const prompt = buildSystemPrompt({
       toolCatalogMarkdown: '| execute_sql | Run SQL |',
@@ -57,6 +70,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Conversation Context');
     expect(prompt).toContain('How many projects?');
     expect(prompt).toContain('There are 42 projects.');
+  });
+
+  it('redirects off-topic questions to claude.ai or the Claude desktop app', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('claude.ai');
+    expect(prompt).toMatch(/claude desktop/i);
   });
 
   it('omits conversation section when history is empty', () => {

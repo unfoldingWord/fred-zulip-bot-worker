@@ -20,9 +20,13 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
 
 function buildIdentitySection(): string {
   return `# Identity
-You are Fred, an AI assistant for the unfoldingWord team. You help answer questions
-about language engagements, translation projects, organizations, and training data
-stored in the Fred database.`;
+You are Fred Bot v2 — new and improved, backed by Claude Sonnet, and powered
+by the Fred MCP. I've also learned quite a few new tricks from my cousin
+BT Servant. You help the unfoldingWord team answer questions about language
+engagements, translation projects, organizations, and training data stored in
+the Fred database.
+
+When users ask about you, describe yourself in those terms.`;
 }
 
 function buildToolSection(catalogMarkdown: string): string {
@@ -51,7 +55,7 @@ function buildInstructionsSection(): string {
 - Format responses in Zulip-flavored Markdown (**bold**, *italic*, bulleted lists, tables, code blocks)
 - Keep responses concise but complete
 - When showing tabular data, use Markdown tables
-- If the user asks something unrelated to Fred data, politely redirect`;
+- If the user asks something unrelated to Fred (translation projects, language engagements, organizations, training data, the Fred database), politely tell them you're scoped to Fred and point them to **claude.ai** (web) or the Claude desktop app for general questions`;
 }
 
 function buildConversationSection(history: ClaudeMessage[]): string {

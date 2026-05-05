@@ -211,6 +211,25 @@ describe('ZulipClient reactions and messages', () => {
       expect(url.searchParams.get('anchor')).toBe('newest');
       expect(url.searchParams.get('num_before')).toBe('20');
       expect(url.searchParams.get('num_after')).toBe('0');
+      expect(url.searchParams.has('include_anchor')).toBe(false);
+      expect(url.searchParams.has('apply_markdown')).toBe(false);
+    });
+
+    it('forwards include_anchor and apply_markdown when provided', async () => {
+      const client = new ZulipClient('https://chat.example.com', 'bot@test.com', 'key');
+
+      await client.getMessages({
+        narrow: [],
+        anchor: 12345,
+        include_anchor: false,
+        apply_markdown: false,
+      });
+
+      const call = getLastFetchCall();
+      const url = new URL(call?.[0] as string);
+      expect(url.searchParams.get('anchor')).toBe('12345');
+      expect(url.searchParams.get('include_anchor')).toBe('false');
+      expect(url.searchParams.get('apply_markdown')).toBe('false');
     });
   });
 });
