@@ -1,4 +1,4 @@
-name = "fred-zulip-bot-worker"
+name = "fred-zulip-bot"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
@@ -21,4 +21,4 @@ FRED_MCP_URL = "https://fred-mcp.fly.dev/mcp"
 
 [[kv_namespaces]]
 binding = "CONVERSATION_CACHE"
-id = "PLACEHOLDER_REPLACE_AFTER_CREATION"
+id = "e69316f76e10429b95c599825a820b72"
