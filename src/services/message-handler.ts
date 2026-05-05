@@ -19,6 +19,7 @@ export async function handleMessage(payload: ZulipWebhookPayload, env: Env): Pro
   const { logger, client } = ctx;
 
   try {
+    await addThinkingReaction(client, payload.message.id, logger);
     const inputs = await prepareOrchestrationInputs(ctx, payload.message, env);
     const systemPrompt = buildSystemPrompt({
       toolCatalogMarkdown: generateToolCatalogMarkdown(inputs.catalog),
@@ -51,6 +52,17 @@ export async function handleMessage(payload: ZulipWebhookPayload, env: Env): Pro
   } finally {
     clearTimeout(timeout);
     await removeThinkingReaction(client, payload.message.id, logger);
+  }
+}
+
+async function addThinkingReaction(
+  client: ZulipClient,
+  messageId: number,
+  logger: RequestLogger
+): Promise<void> {
+  const res = await client.addReaction(messageId, 'thinking');
+  if (!res.ok) {
+    logger.warn('reaction_add_failed', { message_id: messageId, status: res.status });
   }
 }
 

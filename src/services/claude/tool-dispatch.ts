@@ -1,6 +1,8 @@
 import type { ToolUseBlock, OrchestrationContext } from './types.js';
 import { callTool } from '../mcp/call-tool.js';
 import { findTool } from '../mcp/catalog.js';
+import { executeCode } from '../code-execution/quickjs-executor.js';
+import type { HostFunction } from '../code-execution/types.js';
 
 export async function dispatchToolCall(
   toolCall: ToolUseBlock,
@@ -19,6 +21,10 @@ export async function dispatchToolCall(
 
   if (!healthTracker.isHealthy) {
     return 'Error: Fred database is temporarily unavailable. Please try again later.';
+  }
+
+  if (ctx.mcpCallCount >= ctx.config.maxMcpCallsPerRequest) {
+    return `Error: MCP call limit (${ctx.config.maxMcpCallsPerRequest}) reached for this request.`;
   }
 
   ctx.mcpCallCount++;
@@ -40,7 +46,29 @@ async function dispatchCodeExecution(
   const input = toolCall.input as { code?: string };
   if (!input.code) return 'Error: No code provided';
 
-  // Phase 6 will implement QuickJS execution
-  ctx.logger.warn('code_execution_not_implemented', { code_length: input.code.length });
-  return 'Error: Code execution is not yet available.';
+  const hostFunctions = buildHostFunctions(ctx);
+  const result = await executeCode(
+    input.code,
+    hostFunctions,
+    {
+      timeoutMs: ctx.config.codeExecTimeoutMs,
+      maxMcpCallsPerExecution: ctx.config.maxMcpCallsPerExecution,
+    },
+    ctx.logger
+  );
+
+  if (!result.success) return `Error: ${result.error}`;
+  return JSON.stringify(result.result ?? result.console_output);
+}
+
+function buildHostFunctions(ctx: OrchestrationContext): Record<string, HostFunction> {
+  const fns: Record<string, HostFunction> = {};
+  for (const tool of ctx.catalog.tools) {
+    fns[tool.name] = async (args: unknown) => {
+      ctx.mcpCallCount++;
+      const result = await callTool(ctx.mcpConfig, tool.name, args, ctx.logger);
+      return result.content;
+    };
+  }
+  return fns;
 }
