@@ -1,6 +1,6 @@
 export interface SendMessageParams {
   type: 'stream' | 'direct';
-  to: string | number;
+  to: string | number | number[];
   topic?: string;
   content: string;
 }
@@ -19,7 +19,7 @@ export class ZulipClient {
   async sendMessage(params: SendMessageParams): Promise<Response> {
     const body = new URLSearchParams();
     body.set('type', params.type);
-    body.set('to', String(params.to));
+    body.set('to', this.serializeTo(params.to));
     if (params.topic) {
       body.set('topic', params.topic);
     }
@@ -33,5 +33,12 @@ export class ZulipClient {
       },
       body,
     });
+  }
+
+  private serializeTo(to: string | number | number[]): string {
+    if (Array.isArray(to)) {
+      return JSON.stringify(to);
+    }
+    return String(to);
   }
 }
