@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { deriveThreadKey } from '../../../../src/services/zulip/thread-key.js';
 import type { ZulipMessage } from '../../../../src/services/zulip/types.js';
 
+const BOT_EMAIL = 'bot@example.com';
+
 describe('deriveThreadKey', () => {
   it('returns channel key for stream messages', () => {
     const message: ZulipMessage = {
@@ -17,7 +19,7 @@ describe('deriveThreadKey', () => {
       timestamp: 1700000000,
     };
 
-    expect(deriveThreadKey(message)).toBe('channel:42:bug-report');
+    expect(deriveThreadKey(message, BOT_EMAIL)).toBe('channel:42:bug-report');
   });
 
   it('returns dm key with sorted IDs for 1:1 DM', () => {
@@ -36,7 +38,7 @@ describe('deriveThreadKey', () => {
       timestamp: 1700000000,
     };
 
-    expect(deriveThreadKey(message)).toBe('dm:3,15');
+    expect(deriveThreadKey(message, BOT_EMAIL)).toBe('dm:15');
   });
 
   it('returns dm key with sorted IDs for group DM', () => {
@@ -56,7 +58,7 @@ describe('deriveThreadKey', () => {
       timestamp: 1700000000,
     };
 
-    expect(deriveThreadKey(message)).toBe('dm:5,12,20');
+    expect(deriveThreadKey(message, BOT_EMAIL)).toBe('dm:5,20');
   });
 
   it('returns unknown key as fallback', () => {
@@ -72,6 +74,6 @@ describe('deriveThreadKey', () => {
       timestamp: 1700000000,
     };
 
-    expect(deriveThreadKey(message)).toBe('unknown:99');
+    expect(deriveThreadKey(message, BOT_EMAIL)).toBe('unknown:99');
   });
 });

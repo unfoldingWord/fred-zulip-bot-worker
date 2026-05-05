@@ -59,6 +59,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('There are 42 projects.');
   });
 
+  it('redirects off-topic questions to claude.ai or the Claude desktop app', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('claude.ai');
+    expect(prompt).toMatch(/claude desktop/i);
+  });
+
   it('omits conversation section when history is empty', () => {
     const prompt = buildSystemPrompt({
       toolCatalogMarkdown: '',

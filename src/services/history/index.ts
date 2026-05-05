@@ -11,7 +11,7 @@ export async function getConversationContext(
   botEmail: string,
   logger: RequestLogger
 ): Promise<ClaudeMessage[]> {
-  const messages = await fetchHistory(client, message, logger);
+  const messages = await fetchHistory(client, message, botEmail, logger);
   return formatAsClaudeMessages(messages, botEmail);
 }
 

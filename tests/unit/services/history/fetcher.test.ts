@@ -17,8 +17,10 @@ describe('fetchHistory', () => {
     globalThis.fetch = originalFetch;
   });
 
+  const BOT_EMAIL = 'bot@test.com';
+
   function makeClient() {
-    return new ZulipClient('https://chat.example.com', 'bot@test.com', 'key');
+    return new ZulipClient('https://chat.example.com', BOT_EMAIL, 'key');
   }
 
   const streamMessage: ZulipMessage = {
@@ -53,7 +55,7 @@ describe('fetchHistory', () => {
   it('builds stream narrow with channel and topic', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
 
-    await fetchHistory(makeClient(), streamMessage, logger);
+    await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
 
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const url = new URL(call[0] as string);
@@ -64,15 +66,49 @@ describe('fetchHistory', () => {
     ]);
   });
 
-  it('builds DM narrow with sorted user IDs', async () => {
+  it('builds DM narrow with the other participant only (excludes bot)', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
 
-    await fetchHistory(makeClient(), dmMessage, logger);
+    await fetchHistory(makeClient(), dmMessage, BOT_EMAIL, logger);
 
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const url = new URL(call[0] as string);
     const narrow = JSON.parse(url.searchParams.get('narrow')!);
-    expect(narrow).toEqual([{ operator: 'dm', operand: '5,10' }]);
+    expect(narrow).toEqual([{ operator: 'dm', operand: '5' }]);
+  });
+
+  it('builds DM narrow with sorted other-participant ids for group DMs', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
+
+    const groupDm: ZulipMessage = {
+      ...dmMessage,
+      display_recipient: [
+        { id: 20, email: 'alice@test.com', full_name: 'Alice' },
+        { id: 5, email: 'user@test.com', full_name: 'User' },
+        { id: 10, email: BOT_EMAIL, full_name: 'Bot' },
+      ],
+    };
+
+    await fetchHistory(makeClient(), groupDm, BOT_EMAIL, logger);
+
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = new URL(call[0] as string);
+    const narrow = JSON.parse(url.searchParams.get('narrow')!);
+    expect(narrow).toEqual([{ operator: 'dm', operand: '5,20' }]);
+  });
+
+  it('skips fetch and returns [] when no other participants remain', async () => {
+    globalThis.fetch = vi.fn();
+
+    const botOnly: ZulipMessage = {
+      ...dmMessage,
+      display_recipient: [{ id: 10, email: BOT_EMAIL, full_name: 'Bot' }],
+    };
+
+    const result = await fetchHistory(makeClient(), botOnly, BOT_EMAIL, logger);
+
+    expect(result).toEqual([]);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('returns messages from response', async () => {
@@ -99,14 +135,14 @@ describe('fetchHistory', () => {
       )
     );
 
-    const result = await fetchHistory(makeClient(), streamMessage, logger);
+    const result = await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
     expect(result).toHaveLength(2);
   });
 
   it('returns empty array on fetch error', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 500 }));
 
-    const result = await fetchHistory(makeClient(), streamMessage, logger);
+    const result = await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
     expect(result).toHaveLength(0);
     expect(logger.error).toHaveBeenCalled();
   });
