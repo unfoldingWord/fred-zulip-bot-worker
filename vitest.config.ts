@@ -14,7 +14,6 @@ export default defineConfig({
           ZULIP_SITE: 'https://chat.example.com',
           ANTHROPIC_API_KEY: 'test-anthropic-key',
           FRED_MCP_TOKEN: 'test-mcp-token',
-          ENGINE_API_KEY: 'test-engine-key',
         },
         kvNamespaces: ['CONVERSATION_CACHE'],
         outboundService: () => new Response(JSON.stringify({ result: 'success' }), { status: 200 }),

@@ -16,7 +16,6 @@ export interface Env {
   ZULIP_SITE: string;
   ANTHROPIC_API_KEY: string;
   FRED_MCP_TOKEN: string;
-  ENGINE_API_KEY: string;
 
   // KV Namespaces
   CONVERSATION_CACHE: KVNamespace;
