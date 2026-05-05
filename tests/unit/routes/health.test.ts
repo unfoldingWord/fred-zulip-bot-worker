@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SELF } from 'cloudflare:test';
+import { APP_VERSION } from '../../../src/generated/version.js';
 
 describe('GET /health', () => {
   it('returns 200 with status and version', async () => {
@@ -9,7 +10,7 @@ describe('GET /health', () => {
     const body = await response.json();
     expect(body).toEqual({
       status: 'healthy',
-      version: '0.1.0',
+      version: APP_VERSION,
     });
   });
 });
