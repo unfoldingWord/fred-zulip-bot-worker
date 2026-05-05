@@ -14,7 +14,7 @@ export interface DirectMessageParams {
 export type SendMessageParams = StreamMessageParams | DirectMessageParams;
 
 export interface GetMessagesParams {
-  narrow: Array<{ operator: string; operand: string | number }>;
+  narrow: Array<{ operator: string; operand: string | number | number[] }>;
   anchor?: string | number;
   num_before?: number;
   num_after?: number;

@@ -4,7 +4,7 @@ import type { ZulipHistoryMessage } from './types.js';
 import type { RequestLogger } from '../../utils/logger.js';
 import { otherParticipantIds } from '../zulip/recipients.js';
 
-type Narrow = Array<{ operator: string; operand: string | number }>;
+type Narrow = Array<{ operator: string; operand: string | number | number[] }>;
 
 export async function fetchHistory(
   client: ZulipClient,
@@ -32,9 +32,12 @@ export async function fetchHistory(
   });
 
   if (!response.ok) {
+    const responseBody = await response.text().catch(() => '<unreadable>');
     logger.error('history_fetch_error', {
       status: response.status,
       duration_ms: Date.now() - startMs,
+      narrow: JSON.stringify(narrow),
+      response_body: responseBody.slice(0, 500),
     });
     return [];
   }
@@ -61,7 +64,7 @@ function buildNarrow(message: ZulipMessage, botEmail: string): Narrow | null {
   if (Array.isArray(message.display_recipient)) {
     const ids = otherParticipantIds(message, botEmail);
     if (ids.length === 0) return null;
-    return [{ operator: 'dm', operand: ids.join(',') }];
+    return [{ operator: 'dm', operand: ids }];
   }
 
   return [{ operator: 'topic', operand: message.subject }];

@@ -192,7 +192,7 @@ describe('ZulipClient reactions and messages', () => {
       const client = new ZulipClient('https://chat.example.com', 'bot@test.com', 'key');
 
       await client.getMessages({
-        narrow: [{ operator: 'dm', operand: '5,10' }],
+        narrow: [{ operator: 'dm', operand: [5, 10] }],
       });
 
       const call = getLastFetchCall();

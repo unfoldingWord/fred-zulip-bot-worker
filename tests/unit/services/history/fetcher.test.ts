@@ -86,7 +86,7 @@ describe('fetchHistory', () => {
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const url = new URL(call[0] as string);
     const narrow = JSON.parse(url.searchParams.get('narrow')!);
-    expect(narrow).toEqual([{ operator: 'dm', operand: '5' }]);
+    expect(narrow).toEqual([{ operator: 'dm', operand: [5] }]);
   });
 
   it('builds DM narrow with sorted other-participant ids for group DMs', async () => {
@@ -106,7 +106,7 @@ describe('fetchHistory', () => {
     const call = vi.mocked(globalThis.fetch).mock.calls[0];
     const url = new URL(call[0] as string);
     const narrow = JSON.parse(url.searchParams.get('narrow')!);
-    expect(narrow).toEqual([{ operator: 'dm', operand: '5,20' }]);
+    expect(narrow).toEqual([{ operator: 'dm', operand: [5, 20] }]);
   });
 
   it('skips fetch and returns [] when no other participants remain', async () => {
@@ -151,11 +151,20 @@ describe('fetchHistory', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('returns empty array on fetch error', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 500 }));
+  it('returns empty array on fetch error and logs narrow + response body', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response('{"result":"error","msg":"Bad narrow"}', { status: 400 }));
 
     const result = await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
     expect(result).toHaveLength(0);
-    expect(logger.error).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      'history_fetch_error',
+      expect.objectContaining({
+        status: 400,
+        narrow: expect.stringContaining('"channel"'),
+        response_body: expect.stringContaining('Bad narrow'),
+      })
+    );
   });
 });
