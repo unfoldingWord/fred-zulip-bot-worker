@@ -18,6 +18,8 @@ export interface GetMessagesParams {
   anchor?: string | number;
   num_before?: number;
   num_after?: number;
+  include_anchor?: boolean;
+  apply_markdown?: boolean;
 }
 
 export class ZulipClient {
@@ -84,6 +86,12 @@ export class ZulipClient {
     url.searchParams.set('anchor', String(params.anchor ?? 'newest'));
     url.searchParams.set('num_before', String(params.num_before ?? 20));
     url.searchParams.set('num_after', String(params.num_after ?? 0));
+    if (params.include_anchor !== undefined) {
+      url.searchParams.set('include_anchor', String(params.include_anchor));
+    }
+    if (params.apply_markdown !== undefined) {
+      url.searchParams.set('apply_markdown', String(params.apply_markdown));
+    }
 
     return fetch(url.toString(), {
       method: 'GET',

@@ -24,9 +24,11 @@ export async function fetchHistory(
 
   const response = await client.getMessages({
     narrow,
-    anchor: 'newest',
+    anchor: message.id,
+    include_anchor: false,
     num_before: limit,
     num_after: 0,
+    apply_markdown: false,
   });
 
   if (!response.ok) {

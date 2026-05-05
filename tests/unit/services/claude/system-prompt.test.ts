@@ -13,6 +13,19 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('unfoldingWord');
   });
 
+  it('describes the v2 identity (Claude Sonnet, Fred MCP, BT Servant)', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('Fred Bot v2');
+    expect(prompt).toMatch(/claude sonnet/i);
+    expect(prompt).toContain('Fred MCP');
+    expect(prompt).toContain('BT Servant');
+  });
+
   it('includes tool catalog markdown', () => {
     const prompt = buildSystemPrompt({
       toolCatalogMarkdown: '| execute_sql | Run SQL |',
