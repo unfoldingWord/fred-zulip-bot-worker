@@ -17,6 +17,7 @@ export default defineConfig({
           ENGINE_API_KEY: 'test-engine-key',
         },
         kvNamespaces: ['CONVERSATION_CACHE'],
+        outboundService: () => new Response(JSON.stringify({ result: 'success' }), { status: 200 }),
       },
     }),
   ],

@@ -69,6 +69,9 @@ export default [
       'no-implied-eval': 'error',
       'no-new-func': 'error',
 
+      // No empty catch blocks - every exception must be handled
+      'no-empty': ['error', { allowEmptyCatch: false }],
+
       // Warn on console.log (allow warn/error)
       'no-console': ['warn', { allow: ['warn', 'error'] }],
 

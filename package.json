@@ -25,6 +25,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@cf-wasm/quickjs": "^0.2.5",
     "hono": "^4.12.14",
     "zod": "^3.25.76"
   },
