@@ -34,7 +34,7 @@ questions with real data rather than guessing.
 ${catalogMarkdown}
 
 ## How to Use Tools
-- Use \`execute_code\` to chain multiple tool calls, transform results, or do calculations
+- Call tools to retrieve data, then synthesize the results in your response
 - Prefer the curated tools (find_language_engagements, etc.) over raw execute_sql
 - Use execute_sql only when curated tools don't cover the query`;
 }

@@ -21,7 +21,7 @@ describe('buildSystemPrompt', () => {
     });
 
     expect(prompt).toContain('| execute_sql | Run SQL |');
-    expect(prompt).toContain('execute_code');
+    expect(prompt).toContain('execute_sql');
   });
 
   it('includes query rules when provided', () => {
