@@ -66,6 +66,18 @@ describe('fetchHistory', () => {
     ]);
   });
 
+  it('anchors on the triggering message id and excludes it, requests raw markdown', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
+
+    await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
+
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = new URL(call[0] as string);
+    expect(url.searchParams.get('anchor')).toBe(String(streamMessage.id));
+    expect(url.searchParams.get('include_anchor')).toBe('false');
+    expect(url.searchParams.get('apply_markdown')).toBe('false');
+  });
+
   it('builds DM narrow with the other participant only (excludes bot)', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
 
