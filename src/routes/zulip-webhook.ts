@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types/env.js';
 import { validateWebhookPayload } from '../services/zulip/validation.js';
 import { constantTimeCompare } from '../utils/crypto.js';
+import { ZulipClient } from '../services/zulip/client.js';
+import { handleMessage } from '../services/message-handler.js';
 
 const zulipWebhook = new Hono<{ Bindings: Env }>();
 
@@ -20,6 +22,10 @@ zulipWebhook.post('/api/v1/zulip/webhook', async (c) => {
     return c.json({ error: 'Invalid token' }, 401);
   }
 
+  const client = new ZulipClient(c.env.ZULIP_SITE, c.env.ZULIP_BOT_EMAIL, c.env.ZULIP_BOT_API_KEY);
+  await client.addReaction(parsed.data.message.id, 'thinking');
+
+  c.executionCtx.waitUntil(handleMessage(parsed.data, c.env));
   return c.json({ response_not_required: true });
 });
 

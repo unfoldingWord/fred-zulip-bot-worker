@@ -1,6 +1,13 @@
 export interface Env {
   // Vars (set in wrangler.toml)
   ENVIRONMENT: string;
+  MAX_ORCHESTRATION_ITERATIONS?: string;
+  CODE_EXEC_TIMEOUT_MS?: string;
+  MAX_MCP_CALLS_PER_EXECUTION?: string;
+  MAX_MCP_CALLS_PER_REQUEST?: string;
+  CLAUDE_MODEL?: string;
+  CLAUDE_MAX_TOKENS?: string;
+  FRED_MCP_URL?: string;
 
   // Secrets (set via wrangler secret put)
   ZULIP_BOT_EMAIL: string;

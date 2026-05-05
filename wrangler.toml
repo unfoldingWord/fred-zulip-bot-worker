@@ -11,6 +11,13 @@ cpu_ms = 300000
 
 [vars]
 ENVIRONMENT = "development"
+MAX_ORCHESTRATION_ITERATIONS = "25"
+CODE_EXEC_TIMEOUT_MS = "30000"
+MAX_MCP_CALLS_PER_EXECUTION = "10"
+MAX_MCP_CALLS_PER_REQUEST = "50"
+CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MAX_TOKENS = "4096"
+FRED_MCP_URL = "https://fred-mcp.fly.dev/mcp"
 
 [[kv_namespaces]]
 binding = "CONVERSATION_CACHE"

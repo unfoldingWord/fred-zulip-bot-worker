@@ -1,0 +1,113 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fetchHistory } from '../../../../src/services/history/fetcher.js';
+import { ZulipClient } from '../../../../src/services/zulip/client.js';
+import type { ZulipMessage } from '../../../../src/services/zulip/types.js';
+import type { RequestLogger } from '../../../../src/utils/logger.js';
+
+describe('fetchHistory', () => {
+  let originalFetch: typeof globalThis.fetch;
+  const logger: RequestLogger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function makeClient() {
+    return new ZulipClient('https://chat.example.com', 'bot@test.com', 'key');
+  }
+
+  const streamMessage: ZulipMessage = {
+    id: 1,
+    sender_id: 5,
+    sender_email: 'user@test.com',
+    sender_full_name: 'User',
+    content: 'hello',
+    subject: 'general',
+    stream_id: 42,
+    display_recipient: 'engineering',
+    type: 'stream',
+    timestamp: 1700000000,
+  };
+
+  const dmMessage: ZulipMessage = {
+    id: 2,
+    sender_id: 5,
+    sender_email: 'user@test.com',
+    sender_full_name: 'User',
+    content: 'hi',
+    subject: '',
+    stream_id: undefined,
+    display_recipient: [
+      { id: 5, email: 'user@test.com', full_name: 'User' },
+      { id: 10, email: 'bot@test.com', full_name: 'Bot' },
+    ],
+    type: 'private',
+    timestamp: 1700000000,
+  };
+
+  it('builds stream narrow with channel and topic', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
+
+    await fetchHistory(makeClient(), streamMessage, logger);
+
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = new URL(call[0] as string);
+    const narrow = JSON.parse(url.searchParams.get('narrow')!);
+    expect(narrow).toEqual([
+      { operator: 'channel', operand: 42 },
+      { operator: 'topic', operand: 'general' },
+    ]);
+  });
+
+  it('builds DM narrow with sorted user IDs', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
+
+    await fetchHistory(makeClient(), dmMessage, logger);
+
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = new URL(call[0] as string);
+    const narrow = JSON.parse(url.searchParams.get('narrow')!);
+    expect(narrow).toEqual([{ operator: 'dm', operand: '5,10' }]);
+  });
+
+  it('returns messages from response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          messages: [
+            {
+              id: 1,
+              sender_email: 'a@test.com',
+              sender_full_name: 'A',
+              content: 'hi',
+              timestamp: 1,
+            },
+            {
+              id: 2,
+              sender_email: 'b@test.com',
+              sender_full_name: 'B',
+              content: 'hello',
+              timestamp: 2,
+            },
+          ],
+        })
+      )
+    );
+
+    const result = await fetchHistory(makeClient(), streamMessage, logger);
+    expect(result).toHaveLength(2);
+  });
+
+  it('returns empty array on fetch error', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 500 }));
+
+    const result = await fetchHistory(makeClient(), streamMessage, logger);
+    expect(result).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalled();
+  });
+});
