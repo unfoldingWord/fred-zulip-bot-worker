@@ -116,4 +116,36 @@ describe('executeToolCalls', () => {
     expect(results[0].content).toContain('Error');
     expect(results[0].content).toContain('network error');
   });
+
+  it('routes execute_code through the QuickJS sandbox and counts in-sandbox MCP calls', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text: 'rows: 42' }] },
+        })
+      )
+    );
+
+    const ctx = makeContext();
+    const toolCalls: ToolUseBlock[] = [
+      {
+        type: 'tool_use',
+        id: 'tu_exec',
+        name: 'execute_code',
+        input: {
+          code: '__result__ = await list_tables({});',
+        },
+      },
+    ];
+
+    const results = await executeToolCalls(toolCalls, ctx);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].tool_use_id).toBe('tu_exec');
+    expect(results[0].is_error).toBeUndefined();
+    expect(results[0].content).toContain('rows: 42');
+    expect(ctx.mcpCallCount).toBe(1);
+  });
 });
