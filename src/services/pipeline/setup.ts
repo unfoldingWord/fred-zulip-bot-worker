@@ -21,9 +21,9 @@ export interface PipelineContext {
 export function createPipelineContext(
   payload: ZulipWebhookPayload,
   env: Env,
-  abortSignal: AbortSignal
+  abortSignal: AbortSignal,
+  requestId: string = crypto.randomUUID()
 ): PipelineContext {
-  const requestId = crypto.randomUUID();
   const logger = createRequestLogger(requestId);
   const client = new ZulipClient(env.ZULIP_SITE, env.ZULIP_BOT_EMAIL, env.ZULIP_BOT_API_KEY);
   const config = getOrchestrationConfig(env, logger);

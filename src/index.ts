@@ -3,6 +3,8 @@ import type { Env } from './types/env.js';
 import { health } from './routes/health.js';
 import { zulipWebhook } from './routes/zulip-webhook.js';
 
+export { FredDO } from './durable-objects/index.js';
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.route('', health);

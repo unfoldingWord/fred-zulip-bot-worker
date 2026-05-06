@@ -14,17 +14,21 @@ import { createRequestLogger } from '../utils/logger.js';
 
 const ORCHESTRATION_TIMEOUT_MS = 90000;
 
-export async function handleMessage(payload: ZulipWebhookPayload, env: Env): Promise<void> {
+export async function processFredMessage(
+  payload: ZulipWebhookPayload,
+  env: Env,
+  requestId: string = crypto.randomUUID()
+): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ORCHESTRATION_TIMEOUT_MS);
   // Bootstrap logger covers the small window before pipeline-context setup
   // succeeds; createPipelineContext makes its own logger that we use once
   // available.
-  let logger: RequestLogger = createRequestLogger('bootstrap');
+  let logger: RequestLogger = createRequestLogger(requestId);
   let client: ZulipClient | null = null;
 
   try {
-    const ctx = createPipelineContext(payload, env, controller.signal);
+    const ctx = createPipelineContext(payload, env, controller.signal, requestId);
     logger = ctx.logger;
     client = ctx.client;
     await runPipeline(ctx, payload, env);

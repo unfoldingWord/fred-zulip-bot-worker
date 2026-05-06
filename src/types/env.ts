@@ -21,4 +21,7 @@ export interface Env {
 
   // KV Namespaces
   CONVERSATION_CACHE: KVNamespace;
+
+  // Durable Objects
+  FRED_DO: DurableObjectNamespace;
 }
