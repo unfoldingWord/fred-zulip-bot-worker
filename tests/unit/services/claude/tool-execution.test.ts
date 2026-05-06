@@ -24,6 +24,8 @@ describe('executeToolCalls', () => {
         maxTokens: 4096,
         maxIterations: 25,
         codeExecTimeoutMs: 30000,
+        codeExecMemoryLimitBytes: 48 * 1024 * 1024,
+        codeExecStackSizeBytes: 512 * 1024,
         maxMcpCallsPerExecution: 10,
         maxMcpCallsPerRequest: 50,
         fredMcpUrl: 'https://mcp.test',

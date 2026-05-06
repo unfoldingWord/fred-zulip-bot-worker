@@ -24,4 +24,6 @@ export interface CodeExecutionOptions {
   timeout_ms: number;
   hostFunctions: HostFunction[];
   maxMcpCalls?: number;
+  memoryLimitBytes?: number;
+  stackSizeBytes?: number;
 }

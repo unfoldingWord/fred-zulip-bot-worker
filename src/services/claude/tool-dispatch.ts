@@ -89,6 +89,8 @@ async function runSandbox(
         timeout_ms: ctx.config.codeExecTimeoutMs,
         hostFunctions,
         maxMcpCalls: ctx.config.maxMcpCallsPerExecution,
+        memoryLimitBytes: ctx.config.codeExecMemoryLimitBytes,
+        stackSizeBytes: ctx.config.codeExecStackSizeBytes,
       },
       ctx.logger
     );

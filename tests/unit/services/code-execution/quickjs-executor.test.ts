@@ -105,6 +105,66 @@ describe('executeCode', () => {
     expect(result.callLimit).toBe(1);
   });
 
+  it('disables eval — calling eval() throws inside the sandbox', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      'try { eval("1+1"); __result__ = "eval-allowed"; } catch (e) { __result__ = "blocked: " + (typeof eval); }',
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+  });
+
+  it('disables Function constructor — new Function() throws inside the sandbox', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      'try { new Function("return 1")(); __result__ = "function-allowed"; } catch (e) { __result__ = "blocked: " + e.message; }',
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+  });
+
+  it('enforces memory limit — runaway allocation fails inside sandbox', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const chunks = [];
+         while (true) {
+           chunks.push(new Array(100000).fill('x'.repeat(1000)));
+         }
+       } catch (e) {
+         __result__ = "caught: " + (e && e.message ? e.message : String(e));
+       }`,
+      { timeout_ms: 5000, hostFunctions: [], memoryLimitBytes: 2 * 1024 * 1024 },
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^caught:/);
+  });
+
+  it('enforces stack size — infinite recursion is bounded by the stack cap', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const recurse = () => recurse();
+         recurse();
+       } catch (e) {
+         __result__ = "caught: " + (e && e.message ? e.message : String(e));
+       }`,
+      { timeout_ms: 5000, hostFunctions: [], stackSizeBytes: 64 * 1024 },
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^caught:/);
+  });
+
   it('enforces wall-clock budget on a hung host call', async () => {
     const logger = makeLogger();
     const hang: HostFunction = {

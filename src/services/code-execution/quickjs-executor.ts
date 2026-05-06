@@ -1,4 +1,4 @@
-import { getQuickJSWASMModule, QuickJSContext } from '@cf-wasm/quickjs/workerd';
+import { getQuickJSWASMModule, QuickJSContext, QuickJSRuntime } from '@cf-wasm/quickjs/workerd';
 import { CodeExecutionError, MCPCallLimitError, TimeoutError } from '../../utils/errors.js';
 import type { RequestLogger } from '../../utils/logger.js';
 import { summarizeArgs } from '../../utils/log-redaction.js';
@@ -15,6 +15,8 @@ const MCP_CALL_WARNING_THRESHOLD = 0.8;
 const CONSOLE_LINE_MAX = 1024;
 const CODE_LOG_PREFIX_LEN = 1000;
 const STACK_LOG_LEN = 500;
+const DEFAULT_MEMORY_LIMIT_BYTES = 48 * 1024 * 1024;
+const DEFAULT_STACK_SIZE_BYTES = 512 * 1024;
 
 interface MCPCallCounter {
   count: number;
@@ -487,6 +489,89 @@ async function runCodeInVM(ctx: VMExecutionContext): Promise<unknown> {
   return extractResult(ctx.vm);
 }
 
+function createSandbox(
+  module: Awaited<ReturnType<typeof getQuickJSWASMModule>>,
+  options: CodeExecutionOptions,
+  logger: RequestLogger
+): { runtime: QuickJSRuntime; vm: QuickJSContext } {
+  const runtime = module.newRuntime();
+  runtime.setMemoryLimit(options.memoryLimitBytes ?? DEFAULT_MEMORY_LIMIT_BYTES);
+  runtime.setMaxStackSize(options.stackSizeBytes ?? DEFAULT_STACK_SIZE_BYTES);
+  const vm = runtime.newContext();
+  removeEvalGlobals(vm, logger);
+  return { runtime, vm };
+}
+
+// Disable host-language constructs that would let user code dynamically
+// evaluate strings (eval, Function constructor, async/generator function
+// constructors). The QuickJS Eval intrinsic must remain enabled or
+// vm.evalCode itself stops working — so we strip the user-visible globals
+// instead. The system prompt advertises these as unavailable; this enforces
+// it. Per-step failures are reported back to the host logger via a sandbox
+// global, so a future QuickJS API change that breaks one of these steps is
+// visible in observability instead of silently swallowed.
+function removeEvalGlobals(vm: QuickJSContext, logger: RequestLogger): void {
+  const result = vm.evalCode(
+    `(() => {
+      const failures = [];
+      const step = (name, fn) => {
+        try { fn(); }
+        catch (e) { failures.push(name + ': ' + (e && e.message ? e.message : String(e))); }
+      };
+      step('delete-eval', () => { delete globalThis.eval; });
+      step('delete-Function', () => { delete globalThis.Function; });
+      step('strip-AsyncFunction', () => {
+        Object.getPrototypeOf(async function(){}).constructor.prototype = null;
+      });
+      step('strip-GeneratorFunction', () => {
+        Object.getPrototypeOf(function*(){}).constructor.prototype = null;
+      });
+      step('strip-AsyncGeneratorFunction', () => {
+        Object.getPrototypeOf(async function*(){}).constructor.prototype = null;
+      });
+      return failures.join(' | ');
+    })()`
+  );
+  if (result.error) {
+    const errValue = vm.dump(result.error);
+    result.error.dispose();
+    logger.warn('sandbox_cleanup_eval_failed', {
+      error: typeof errValue === 'string' ? errValue : JSON.stringify(errValue),
+    });
+    return;
+  }
+  const failuresStr = vm.dump(result.value);
+  result.value.dispose();
+  if (typeof failuresStr === 'string' && failuresStr.length > 0) {
+    logger.warn('sandbox_cleanup_eval_partial', { failures: failuresStr });
+  }
+}
+
+function computeResultSize(value: unknown): number {
+  try {
+    return JSON.stringify(value ?? null).length;
+  } catch {
+    return -1;
+  }
+}
+
+function logExecuteCodeStart(
+  logger: RequestLogger,
+  code: string,
+  options: CodeExecutionOptions,
+  mcpCounter: MCPCallCounter
+): void {
+  logger.log('code_execution_start', {
+    code_length: code.length,
+    code: code.slice(0, CODE_LOG_PREFIX_LEN),
+    host_functions: options.hostFunctions.map((f) => f.name),
+    max_mcp_calls: mcpCounter.limit,
+    timeout_ms: options.timeout_ms,
+    memory_limit_bytes: options.memoryLimitBytes ?? DEFAULT_MEMORY_LIMIT_BYTES,
+    stack_size_bytes: options.stackSizeBytes ?? DEFAULT_STACK_SIZE_BYTES,
+  });
+}
+
 export async function executeCode(
   code: string,
   options: CodeExecutionOptions,
@@ -494,38 +579,27 @@ export async function executeCode(
 ): Promise<CodeExecutionResult> {
   const startTime = Date.now();
   const logs: ConsoleLog[] = [];
+  let runtime: QuickJSRuntime | null = null;
   let vm: QuickJSContext | null = null;
   const mcpCounter: MCPCallCounter = {
     count: 0,
     limit: options.maxMcpCalls ?? DEFAULT_MAX_MCP_CALLS,
   };
-  logger.log('code_execution_start', {
-    code_length: code.length,
-    code: code.slice(0, CODE_LOG_PREFIX_LEN),
-    host_functions: options.hostFunctions.map((f) => f.name),
-    max_mcp_calls: mcpCounter.limit,
-    timeout_ms: options.timeout_ms,
-  });
+  logExecuteCodeStart(logger, code, options, mcpCounter);
 
   try {
     const module = await getQuickJSModule();
-    const ctx = module.newContext();
-    vm = ctx;
-    const value = await runCodeInVM({ vm: ctx, code, options, logs, mcpCounter, logger });
-    const resultSize = (() => {
-      try {
-        return JSON.stringify(value ?? null).length;
-      } catch {
-        return -1;
-      }
-    })();
+    const sandbox = createSandbox(module, options, logger);
+    runtime = sandbox.runtime;
+    vm = sandbox.vm;
+    const value = await runCodeInVM({ vm, code, options, logs, mcpCounter, logger });
     logger.log('code_execution_complete', {
       duration_ms: Date.now() - startTime,
       console_logs_count: logs.length,
       mcp_calls_made: mcpCounter.count,
       mcp_calls_limit: mcpCounter.limit,
       success: true,
-      result_size: resultSize,
+      result_size: computeResultSize(value),
     });
     return buildSuccessResult(value, logs, startTime, mcpCounter);
   } catch (error) {
@@ -533,6 +607,7 @@ export async function executeCode(
     return buildErrorResult(error, logs, startTime, mcpCounter);
   } finally {
     vm?.dispose();
+    runtime?.dispose();
   }
 }
 

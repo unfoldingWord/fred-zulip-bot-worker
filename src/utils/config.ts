@@ -6,6 +6,8 @@ export interface OrchestrationConfig {
   maxTokens: number;
   maxIterations: number;
   codeExecTimeoutMs: number;
+  codeExecMemoryLimitBytes: number;
+  codeExecStackSizeBytes: number;
   maxMcpCallsPerExecution: number;
   maxMcpCallsPerRequest: number;
   fredMcpUrl: string;
@@ -40,6 +42,18 @@ export function getOrchestrationConfig(env: Env, logger: RequestLogger): Orchest
       env.CODE_EXEC_TIMEOUT_MS,
       'CODE_EXEC_TIMEOUT_MS',
       30000,
+      logger
+    ),
+    codeExecMemoryLimitBytes: parseIntEnvVar(
+      env.CODE_EXEC_MEMORY_LIMIT_BYTES,
+      'CODE_EXEC_MEMORY_LIMIT_BYTES',
+      48 * 1024 * 1024,
+      logger
+    ),
+    codeExecStackSizeBytes: parseIntEnvVar(
+      env.CODE_EXEC_STACK_SIZE_BYTES,
+      'CODE_EXEC_STACK_SIZE_BYTES',
+      512 * 1024,
       logger
     ),
     maxMcpCallsPerExecution: parseIntEnvVar(
