@@ -1,7 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types/env.js';
+import type { ZulipWebhookPayload } from '../services/zulip/types.js';
 import { ZulipWebhookPayloadSchema } from '../services/zulip/types.js';
 import { processFredMessage } from '../services/message-handler.js';
+import type { RequestLogger } from '../utils/logger.js';
 import { createRequestLogger } from '../utils/logger.js';
 
 const PROCESS_PATH = '/process';
@@ -63,19 +65,35 @@ export class FredDO extends DurableObject<Env> {
       sender_id: payload.message.sender_id,
     });
 
+    const acceptedAt = Date.now();
     this.processing = this.processing.then(() =>
-      processFredMessage(payload, this.env, requestId).catch((e) => {
-        // processFredMessage already routes user-facing errors through
-        // sendErrorMessage. A throw escaping that path means the error
-        // handler itself failed; log so the chain can recover. Hardening
-        // this branch with a watchdog + backstop reply is #13.
-        logger.error('fred_do_processing_unhandled', {
-          error: e instanceof Error ? e.message : String(e),
-          error_name: e instanceof Error ? e.name : 'Unknown',
-        });
-      })
+      this.runProcessing(payload, requestId, logger, acceptedAt)
     );
 
     return new Response(null, { status: 202 });
+  }
+
+  private async runProcessing(
+    payload: ZulipWebhookPayload,
+    requestId: string,
+    logger: RequestLogger,
+    acceptedAt: number
+  ): Promise<void> {
+    const startedAt = Date.now();
+    logger.log('fred_do_processing_started', { queue_wait_ms: startedAt - acceptedAt });
+    try {
+      await processFredMessage(payload, this.env, requestId);
+      logger.log('fred_do_processing_completed', { duration_ms: Date.now() - startedAt });
+    } catch (e) {
+      // processFredMessage already routes user-facing errors through
+      // sendErrorMessage. A throw escaping that path means the error handler
+      // itself failed; log so the chain can recover. Hardening this branch
+      // with a watchdog + backstop reply is #13.
+      logger.error('fred_do_processing_unhandled', {
+        duration_ms: Date.now() - startedAt,
+        error: e instanceof Error ? e.message : String(e),
+        error_name: e instanceof Error ? e.name : 'Unknown',
+      });
+    }
   }
 }

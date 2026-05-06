@@ -8,22 +8,27 @@ import { createRequestLogger } from '../utils/logger.js';
 const zulipWebhook = new Hono<{ Bindings: Env }>();
 
 zulipWebhook.post('/api/v1/zulip/webhook', async (c) => {
+  const requestId = crypto.randomUUID();
+  const logger = createRequestLogger(requestId);
+  logger.log('webhook_received');
+
   const body = await c.req.json().catch(() => null);
   if (!body) {
+    logger.warn('webhook_rejected', { reason: 'invalid_json' });
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
 
   const parsed = validateWebhookPayload(body);
   if (!parsed.success) {
+    logger.warn('webhook_rejected', { reason: 'invalid_payload', error: parsed.error });
     return c.json({ error: 'Invalid webhook payload' }, 400);
   }
 
   if (!constantTimeCompare(parsed.data.token, c.env.ZULIP_WEBHOOK_TOKEN)) {
+    logger.warn('webhook_rejected', { reason: 'invalid_token' });
     return c.json({ error: 'Invalid token' }, 401);
   }
 
-  const requestId = crypto.randomUUID();
-  const logger = createRequestLogger(requestId);
   const threadKey = deriveThreadKey(parsed.data.message, c.env.ZULIP_BOT_EMAIL);
   const doId = c.env.FRED_DO.idFromName(threadKey);
   const stub = c.env.FRED_DO.get(doId);
@@ -51,6 +56,7 @@ zulipWebhook.post('/api/v1/zulip/webhook', async (c) => {
   logger.log('fred_do_dispatched', {
     thread_key: threadKey,
     message_id: parsed.data.message.id,
+    message_type: parsed.data.message.type,
   });
   return c.json({ response_not_required: true });
 });
