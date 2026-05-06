@@ -104,6 +104,10 @@ describe('executeCode', () => {
     expect(result.errorCode).toBe('MCP_CALL_LIMIT_EXCEEDED');
     expect(result.callLimit).toBe(1);
   });
+});
+
+describe('executeCode sandbox guarantees', () => {
+  const baseOptions = { timeout_ms: 5000, hostFunctions: [] as HostFunction[] };
 
   it('disables eval — calling eval() throws inside the sandbox', async () => {
     const logger = makeLogger();
@@ -127,6 +131,74 @@ describe('executeCode', () => {
 
     expect(result.success).toBe(true);
     expect(String(result.result)).toMatch(/^blocked:/);
+  });
+
+  it('blocks Function reached via prototype chain (string.constructor.constructor)', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const F = ''.constructor.constructor;
+         F('return 1')();
+         __result__ = 'allowed';
+       } catch (e) { __result__ = 'blocked: ' + e.message; }`,
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+    expect(String(result.result)).toMatch(/Function/);
+  });
+
+  it('blocks AsyncFunction reached via Object.getPrototypeOf(async fn).constructor', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const AF = Object.getPrototypeOf(async function(){}).constructor;
+         await AF('return 1')();
+         __result__ = 'allowed';
+       } catch (e) { __result__ = 'blocked: ' + e.message; }`,
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+    expect(String(result.result)).toMatch(/AsyncFunction/);
+  });
+
+  it('blocks GeneratorFunction reached via Object.getPrototypeOf(generator fn).constructor', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const GF = Object.getPrototypeOf(function*(){}).constructor;
+         GF('yield 1');
+         __result__ = 'allowed';
+       } catch (e) { __result__ = 'blocked: ' + e.message; }`,
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+    expect(String(result.result)).toMatch(/GeneratorFunction/);
+  });
+
+  it('blocks AsyncGeneratorFunction reached via Object.getPrototypeOf(async gen fn).constructor', async () => {
+    const logger = makeLogger();
+    const result = await executeCode(
+      `try {
+         const AGF = Object.getPrototypeOf(async function*(){}).constructor;
+         AGF('yield 1');
+         __result__ = 'allowed';
+       } catch (e) { __result__ = 'blocked: ' + e.message; }`,
+      baseOptions,
+      logger
+    );
+
+    expect(result.success).toBe(true);
+    expect(String(result.result)).toMatch(/^blocked:/);
+    expect(String(result.result)).toMatch(/AsyncGeneratorFunction/);
   });
 
   it('enforces memory limit — runaway allocation fails inside sandbox', async () => {

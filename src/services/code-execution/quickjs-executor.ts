@@ -503,35 +503,61 @@ function createSandbox(
 }
 
 // Disable host-language constructs that would let user code dynamically
-// evaluate strings (eval, Function constructor, async/generator function
-// constructors). The QuickJS Eval intrinsic must remain enabled or
-// vm.evalCode itself stops working — so we strip the user-visible globals
-// instead. The system prompt advertises these as unavailable; this enforces
-// it. Per-step failures are reported back to the host logger via a sandbox
-// global, so a future QuickJS API change that breaks one of these steps is
-// visible in observability instead of silently swallowed.
+// evaluate strings: `eval`, the `Function` constructor, and the async /
+// generator / async-generator function constructors. The QuickJS Eval
+// intrinsic must remain enabled or `vm.evalCode` itself stops working, so
+// we cannot disable it at the intrinsic level — instead we make every
+// reachable name resolve to a stub that throws.
+//
+// Reachable paths a sandboxed program could use:
+//   - globalThis.eval / globalThis.Function           → delete from global
+//   - ''.constructor.constructor                      → Function.prototype.constructor
+//   - Object.getPrototypeOf(async function(){}).constructor   → AsyncFunction
+//   - Object.getPrototypeOf(function*(){}).constructor        → GeneratorFunction
+//   - Object.getPrototypeOf(async function*(){}).constructor  → AsyncGeneratorFunction
+//
+// We overwrite each `constructor` property with a throwing stub so all five
+// paths fail with a clear error, regardless of how user code reaches them.
+// Per-step failures are reported via a sandbox global so a future QuickJS
+// API change that breaks one of these steps shows up in observability.
+const SANDBOX_CLEANUP_SOURCE = `(() => {
+  const failures = [];
+  const step = (name, fn) => {
+    try { fn(); }
+    catch (e) { failures.push(name + ': ' + (e && e.message ? e.message : String(e))); }
+  };
+  const block = (label) => {
+    const fn = function () { throw new Error(label + ' is disabled in this sandbox'); };
+    fn.toString = () => 'function ' + label + '() { [disabled] }';
+    return fn;
+  };
+  const replace = (proto, label) => {
+    Object.defineProperty(proto, 'constructor', {
+      value: block(label),
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  };
+  step('delete-eval', () => { delete globalThis.eval; });
+  step('delete-Function', () => { delete globalThis.Function; });
+  step('replace-Function-ctor', () => {
+    replace(Object.getPrototypeOf(function(){}), 'Function');
+  });
+  step('replace-AsyncFunction-ctor', () => {
+    replace(Object.getPrototypeOf(async function(){}), 'AsyncFunction');
+  });
+  step('replace-GeneratorFunction-ctor', () => {
+    replace(Object.getPrototypeOf(function*(){}), 'GeneratorFunction');
+  });
+  step('replace-AsyncGeneratorFunction-ctor', () => {
+    replace(Object.getPrototypeOf(async function*(){}), 'AsyncGeneratorFunction');
+  });
+  return failures.join(' | ');
+})()`;
+
 function removeEvalGlobals(vm: QuickJSContext, logger: RequestLogger): void {
-  const result = vm.evalCode(
-    `(() => {
-      const failures = [];
-      const step = (name, fn) => {
-        try { fn(); }
-        catch (e) { failures.push(name + ': ' + (e && e.message ? e.message : String(e))); }
-      };
-      step('delete-eval', () => { delete globalThis.eval; });
-      step('delete-Function', () => { delete globalThis.Function; });
-      step('strip-AsyncFunction', () => {
-        Object.getPrototypeOf(async function(){}).constructor.prototype = null;
-      });
-      step('strip-GeneratorFunction', () => {
-        Object.getPrototypeOf(function*(){}).constructor.prototype = null;
-      });
-      step('strip-AsyncGeneratorFunction', () => {
-        Object.getPrototypeOf(async function*(){}).constructor.prototype = null;
-      });
-      return failures.join(' | ');
-    })()`
-  );
+  const result = vm.evalCode(SANDBOX_CLEANUP_SOURCE);
   if (result.error) {
     const errValue = vm.dump(result.error);
     result.error.dispose();
