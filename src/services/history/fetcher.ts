@@ -11,7 +11,7 @@ export async function fetchHistory(
   message: ZulipMessage,
   botEmail: string,
   logger: RequestLogger,
-  limit: number = 20
+  limit: number = 10
 ): Promise<ZulipHistoryMessage[]> {
   const narrow = buildNarrow(message, botEmail);
   if (narrow === null) {

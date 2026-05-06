@@ -50,3 +50,17 @@ export class CodeExecutionError extends AppError {
     this.name = 'CodeExecutionError';
   }
 }
+
+export class MCPCallLimitError extends AppError {
+  constructor(
+    public readonly callsMade: number,
+    public readonly limit: number
+  ) {
+    super(
+      `MCP call limit exceeded: ${callsMade} calls attempted, limit is ${limit}`,
+      'MCP_CALL_LIMIT_EXCEEDED',
+      429
+    );
+    this.name = 'MCPCallLimitError';
+  }
+}

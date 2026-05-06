@@ -3,6 +3,8 @@ export interface Env {
   ENVIRONMENT: string;
   MAX_ORCHESTRATION_ITERATIONS?: string;
   CODE_EXEC_TIMEOUT_MS?: string;
+  CODE_EXEC_MEMORY_LIMIT_BYTES?: string;
+  CODE_EXEC_STACK_SIZE_BYTES?: string;
   MAX_MCP_CALLS_PER_EXECUTION?: string;
   MAX_MCP_CALLS_PER_REQUEST?: string;
   CLAUDE_MODEL?: string;

@@ -52,6 +52,16 @@ describe('fetchHistory', () => {
     timestamp: 1700000000,
   };
 
+  it('defaults to fetching 10 messages of history', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
+
+    await fetchHistory(makeClient(), streamMessage, BOT_EMAIL, logger);
+
+    const call = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = new URL(call[0] as string);
+    expect(url.searchParams.get('num_before')).toBe('10');
+  });
+
   it('builds stream narrow with channel and topic', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ messages: [] })));
 

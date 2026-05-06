@@ -83,6 +83,61 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/claude desktop/i);
   });
 
+  it('describes execute_code capability with restored "and execution" wording', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('and execution');
+    expect(prompt).toMatch(/code on the fly/i);
+  });
+
+  it('notes that MCP tools are callable inside execute_code', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toMatch(/inside execute_code/i);
+  });
+
+  it('includes Code Execution Guardrails with scoping rules', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toMatch(/Code Execution Guardrails/);
+    expect(prompt).toMatch(/never loop over more than 10/i);
+    expect(prompt).toMatch(/partial-results pattern/i);
+  });
+
+  it('mandates try/catch around every MCP call inside execute_code', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toMatch(/Error-Resilient Code/);
+    expect(prompt).toMatch(/wrapped in its own try\/catch/i);
+  });
+
+  it('requires every turn to end in a user-facing text response', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toMatch(/Closing the Turn/);
+    expect(prompt).toMatch(/never terminate a turn on a silent tool result/i);
+  });
+
   it('omits conversation section when history is empty', () => {
     const prompt = buildSystemPrompt({
       toolCatalogMarkdown: '',
