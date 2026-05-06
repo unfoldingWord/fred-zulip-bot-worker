@@ -9,3 +9,11 @@ head_sampling_rate = 1
 [[kv_namespaces]]
 binding = "CONVERSATION_CACHE"
 id = "test-conversation-cache"
+
+[[durable_objects.bindings]]
+name = "FRED_DO"
+class_name = "FredDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FredDO"]

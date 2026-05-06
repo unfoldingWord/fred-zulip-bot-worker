@@ -24,3 +24,16 @@ FRED_MCP_URL = "https://fred-mcp.fly.dev/mcp"
 [[kv_namespaces]]
 binding = "CONVERSATION_CACHE"
 id = "e69316f76e10429b95c599825a820b72"
+
+# Per-thread Durable Object that owns Fred orchestration. Routing is by
+# deriveThreadKey() (channel:{stream_id}:{subject} | dm:{sorted_ids}) so
+# same-topic messages serialize and different-topic messages run in parallel.
+# Orchestration runs inside the DO fetch handler — no ctx.waitUntil — which
+# gives us the full cpu_ms budget instead of the 30s post-response ceiling.
+[[durable_objects.bindings]]
+name = "FRED_DO"
+class_name = "FredDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FredDO"]
