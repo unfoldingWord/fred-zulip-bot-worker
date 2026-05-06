@@ -138,6 +138,20 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/never terminate a turn on a silent tool result/i);
   });
 
+  it('includes Beta Disclaimer section that points users to the FRED webapp', () => {
+    const prompt = buildSystemPrompt({
+      toolCatalogMarkdown: '',
+      queryRules: '',
+      conversationHistory: [],
+    });
+
+    expect(prompt).toContain('# Beta Disclaimer');
+    expect(prompt).toMatch(/currently in beta/i);
+    expect(prompt).toContain('FRED webapp');
+    expect(prompt).toContain('⚠️ Beta reminder');
+    expect(prompt).toMatch(/skip the disclaimer for purely conversational responses/i);
+  });
+
   it('omits conversation section when history is empty', () => {
     const prompt = buildSystemPrompt({
       toolCatalogMarkdown: '',

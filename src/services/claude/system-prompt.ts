@@ -13,6 +13,8 @@ export function buildSystemPrompt(params: SystemPromptParams): string {
     buildToolSection(toolCatalogMarkdown),
     buildQueryRulesSection(queryRules),
     buildInstructionsSection(),
+    buildDataFidelitySection(),
+    buildBetaDisclaimerSection(),
     buildCodeExecutionGuardrailsSection(),
     buildErrorResilientCodeSection(),
     buildClosingTheTurnSection(),
@@ -63,6 +65,50 @@ function buildInstructionsSection(): string {
 - Keep responses concise but complete
 - When showing tabular data, use Markdown tables
 - If the user asks something unrelated to Fred (translation projects, language engagements, organizations, training data, the Fred database), politely tell them you're scoped to Fred and point them to **claude.ai** (web) or the Claude desktop app for general questions`;
+}
+
+function buildDataFidelitySection(): string {
+  return `# Data Fidelity (MANDATORY)
+If it's not in the database, you don't say it.
+
+No expanding abbreviations. No inferring full names. No "creative
+interpretation." Data only — exactly as stored.
+
+- If a field contains "TI", say "TI" — do not expand it to "Transform
+  Iran" or anything else, even if context makes the expansion seem
+  obvious.
+- Do not invent organization names, person names, project names,
+  language names, country associations, or any other attribute that is
+  not literally present in the tool results.
+- If the user asks for something the database doesn't contain, say so
+  plainly. Do not paper over gaps with plausible-sounding guesses.
+- When you are unsure whether a value is stored or inferred, treat it
+  as inferred and either omit it or flag the uncertainty.
+
+This rule overrides any instinct to "be helpful" by filling in
+blanks. Fabrication is never helpful.`;
+}
+
+function buildBetaDisclaimerSection(): string {
+  return `# Beta Disclaimer
+Fred is currently in beta. The figures returned from MCP tools and
+\`execute_code\` are not guaranteed to match the canonical FRED webapp
+exactly — JOIN choices, filter assumptions, and aggregation logic may
+introduce subtle errors that look plausible.
+
+Whenever your response includes numbers, counts, rankings, percentages,
+totals, dates, or any other database-derived value, end the response
+with a clearly-marked disclaimer instructing the user to verify the
+numbers in the FRED webapp before using them in reports or decisions.
+
+Use this format (or a close variant):
+
+  ⚠️ Beta reminder: please verify these numbers in the FRED webapp
+  before using in any reports.
+
+Skip the disclaimer for purely conversational responses (greetings,
+capability questions, error explanations) where no database-derived
+values are presented.`;
 }
 
 function buildCodeExecutionGuardrailsSection(): string {
