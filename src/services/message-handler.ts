@@ -12,7 +12,12 @@ import { buildToolDefinitions } from './claude/tools.js';
 import { generateToolCatalogMarkdown } from './mcp/catalog.js';
 import { createRequestLogger } from '../utils/logger.js';
 
-const ORCHESTRATION_TIMEOUT_MS = 90000;
+// Wall-clock backstop for orchestration inside the FredDO. Set well below
+// the configured 300s CPU cap so the AbortController fires first and the
+// catch path has slack (~30s) to post a Zulip error reply before the
+// runtime kills the invocation. #13 will replace this with a proper
+// watchdog (env-configurable, dedicated timeout-reply text, log signal).
+const ORCHESTRATION_TIMEOUT_MS = 270000;
 
 export async function processFredMessage(
   payload: ZulipWebhookPayload,
