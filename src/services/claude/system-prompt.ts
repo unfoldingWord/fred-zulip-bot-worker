@@ -1,16 +1,19 @@
 import type { ClaudeMessage } from '../history/types.js';
+import { APP_VERSION } from '../../generated/version.js';
 
 export interface SystemPromptParams {
   toolCatalogMarkdown: string;
   queryRules: string;
+  schema: string;
   conversationHistory: ClaudeMessage[];
 }
 
 export function buildSystemPrompt(params: SystemPromptParams): string {
-  const { toolCatalogMarkdown, queryRules, conversationHistory } = params;
+  const { toolCatalogMarkdown, queryRules, schema, conversationHistory } = params;
   const sections = [
     buildIdentitySection(),
     buildToolSection(toolCatalogMarkdown),
+    buildSchemaSection(schema),
     buildQueryRulesSection(queryRules),
     buildInstructionsSection(),
     buildDataFidelitySection(),
@@ -34,7 +37,10 @@ projects, organizations, and training data stored in the Fred database.
 When the curated tools don't fit, I can write code on the fly to transform,
 aggregate, and slice the Fred database however you need.
 
-When users ask about you, describe yourself in those terms.`;
+When users ask about you, describe yourself in those terms.
+
+Currently running version ${APP_VERSION}. If asked what version you are,
+answer with that string verbatim.`;
 }
 
 function buildToolSection(catalogMarkdown: string): string {
@@ -49,7 +55,14 @@ ${catalogMarkdown}
 - Call tools to retrieve data, then synthesize the results in your response
 - Prefer the curated tools (find_language_engagements, etc.) over raw execute_sql
 - Use execute_sql only when curated tools don't cover the query
-- All MCP tools above are also callable as async functions inside execute_code (e.g. \`const rows = await execute_sql({ sql: '...' })\`)`;
+- All MCP tools above are also callable as async functions inside execute_code (e.g. \`const rows = await execute_sql({ sql: '...' })\`)
+- Schema is pre-provided in the Database Schema section below; you do not need to call list_tables for routine questions`;
+}
+
+function buildSchemaSection(schema: string): string {
+  if (!schema) return '';
+  return `# Database Schema (use this — do not call list_tables)
+${schema}`;
 }
 
 function buildQueryRulesSection(queryRules: string): string {

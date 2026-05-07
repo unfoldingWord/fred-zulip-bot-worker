@@ -59,6 +59,7 @@ async function runPipeline(
   const systemPrompt = buildSystemPrompt({
     toolCatalogMarkdown: generateToolCatalogMarkdown(inputs.catalog),
     queryRules: inputs.queryRules,
+    schema: inputs.schema,
     conversationHistory: inputs.conversationHistory,
   });
   const tools = buildToolDefinitions(inputs.catalog);
