@@ -37,3 +37,46 @@ class_name = "FredDO"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["FredDO"]
+
+# ──── Test environment ────
+# Auto-deployed on every push to main via .github/workflows/deploy-test.yml.
+# Production (the bare top-level config above) is gated behind the manual
+# Deploy Production workflow (workflow_dispatch only).
+[env.test]
+name = "fred-zulip-bot-test"
+
+[env.test.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.test.limits]
+cpu_ms = 300000
+
+[env.test.vars]
+ENVIRONMENT = "test"
+MAX_ORCHESTRATION_ITERATIONS = "25"
+CODE_EXEC_TIMEOUT_MS = "30000"
+CODE_EXEC_MEMORY_LIMIT_BYTES = "50331648"
+CODE_EXEC_STACK_SIZE_BYTES = "524288"
+MAX_MCP_CALLS_PER_EXECUTION = "10"
+MAX_MCP_CALLS_PER_REQUEST = "50"
+CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MAX_TOKENS = "4096"
+FRED_MCP_URL = "https://fred-mcp.fly.dev/mcp"
+
+# Replace the id below with the value printed by:
+#   wrangler kv:namespace create CONVERSATION_CACHE --env test
+[[env.test.kv_namespaces]]
+binding = "CONVERSATION_CACHE"
+id = "aa84b000a738432ba88050b7db2ae676"
+
+# DO storage is scoped per-worker. Same class_name as prod, but because the
+# worker `name` above differs (fred-zulip-bot-test vs fred-zulip-bot), every
+# DO instance here gets isolated SQLite storage — test and prod cannot see
+# each other's state. No script_name is intentional: that would re-bind to
+# prod's DOs. Top-level [[migrations]] applies here too; the v1 migration
+# registers FredDO as a SQLite class on the test worker independently the
+# first time `wrangler deploy --env test` runs.
+[[env.test.durable_objects.bindings]]
+name = "FRED_DO"
+class_name = "FredDO"
