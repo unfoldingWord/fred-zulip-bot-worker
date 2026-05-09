@@ -53,6 +53,7 @@ async function runPipeline(
   env: Env
 ): Promise<void> {
   const { logger, client } = ctx;
+  const startMs = Date.now();
   await addThinkingReaction(client, payload.message.id, logger);
 
   const inputs = await prepareOrchestrationInputs(ctx, payload.message, env);
@@ -87,7 +88,7 @@ async function runPipeline(
 
   await sendResponse(client, payload, env.ZULIP_BOT_EMAIL, result.response, logger);
   logger.log('request_complete', {
-    total_duration_ms: Date.now(),
+    total_duration_ms: Date.now() - startMs,
     iterations: result.iterations,
     total_input_tokens: result.totalInputTokens,
     total_output_tokens: result.totalOutputTokens,
