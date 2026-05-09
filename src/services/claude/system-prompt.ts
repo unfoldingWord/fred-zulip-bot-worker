@@ -55,8 +55,7 @@ ${catalogMarkdown}
 - Call tools to retrieve data, then synthesize the results in your response
 - Prefer the curated tools (find_language_engagements, etc.) over raw execute_sql
 - Use execute_sql only when curated tools don't cover the query
-- All MCP tools above are also callable as async functions inside execute_code (e.g. \`const rows = await execute_sql({ sql: '...' })\`)
-- Schema is pre-provided in the Database Schema section below; you do not need to call list_tables for routine questions`;
+- All MCP tools above are also callable as async functions inside execute_code (e.g. \`const rows = await execute_sql({ sql: '...' })\`)`;
 }
 
 function buildSchemaSection(schema: string): string {

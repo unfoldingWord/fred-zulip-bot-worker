@@ -139,11 +139,15 @@ describe('buildSystemPrompt', () => {
     expect(prompt).not.toContain('# Database Schema');
   });
 
-  it('points the model at the schema section in the tool guidance', () => {
-    const prompt = buildSystemPrompt(baseParams);
+  it('the "do not call list_tables" guidance only appears when schema is provided', () => {
+    const withSchema = buildSystemPrompt({
+      ...baseParams,
+      schema: 't:countries:cols=alpha_3_code:varchar(3)!:PK',
+    });
+    const withoutSchema = buildSystemPrompt(baseParams);
 
-    expect(prompt).toMatch(/schema is pre-provided/i);
-    expect(prompt).toMatch(/do not need to call list_tables/i);
+    expect(withSchema).toMatch(/do not call list_tables/i);
+    expect(withoutSchema).not.toMatch(/do not call list_tables/i);
   });
 
   it('surfaces the current APP_VERSION in the identity section', () => {
