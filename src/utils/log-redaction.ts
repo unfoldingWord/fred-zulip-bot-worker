@@ -22,6 +22,7 @@ export function summarizeArgs(args: unknown): unknown {
   if (typeof args === 'object') {
     const summary: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(args)) {
+      // eslint-disable-next-line security/detect-object-injection -- key is from Object.entries on a fresh object literal; __proto__ is non-enumerable
       summary[key] = typeof value === 'string' ? `string(${value.length})` : typeof value;
     }
     return summary;
@@ -33,6 +34,8 @@ export function redactSensitiveKeys(args: unknown): unknown {
   if (args === null || args === undefined) return args;
   if (typeof args !== 'object') return args;
   if (Array.isArray(args)) return args.map(redactSensitiveKeys);
+  // key is from Object.entries on a fresh object literal; __proto__ is non-enumerable
+  /* eslint-disable security/detect-object-injection */
   const redacted: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {
     if (isSensitiveKey(key)) {
@@ -43,5 +46,6 @@ export function redactSensitiveKeys(args: unknown): unknown {
       redacted[key] = value;
     }
   }
+  /* eslint-enable security/detect-object-injection */
   return redacted;
 }

@@ -13,6 +13,7 @@ export function constantTimeCompare(a: string, b: string): boolean {
 
   let mismatch = 0;
   for (let i = 0; i < bufA.length; i++) {
+    // eslint-disable-next-line security/detect-object-injection -- i is a bounded loop counter into Uint8Array
     mismatch |= (bufA[i] as number) ^ (bufB[i] as number);
   }
 
