@@ -26,6 +26,7 @@ export async function orchestrate(
 
   while (iterations < config.maxIterations) {
     iterations++;
+    context.iterations = iterations;
     const result = await callClaudeWithTimeout(messages, options, apiKey);
 
     totalInput += result.usage.input_tokens;

@@ -182,7 +182,9 @@ describe('sendErrorMessage', () => {
     globalThis.fetch = fetchMock;
     const logger = makeLogger();
 
-    await sendErrorMessage(makeClient(), streamPayload, BOT_EMAIL, logger, 'no response generated');
+    await sendErrorMessage(makeClient(), streamPayload, BOT_EMAIL, logger, {
+      detail: 'no response generated',
+    });
 
     const body = (fetchMock.mock.calls[0][1] as RequestInit).body as URLSearchParams;
     expect(body.get('content')).toContain('no response generated');

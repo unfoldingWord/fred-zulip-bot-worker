@@ -37,6 +37,7 @@ describe('orchestrate', () => {
       logger,
       requestId: 'test-req',
       mcpCallCount: 0,
+      iterations: 0,
       abortSignal: new AbortController().signal,
       ...overrides,
     };

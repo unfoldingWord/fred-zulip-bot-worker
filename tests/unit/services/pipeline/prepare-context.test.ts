@@ -39,6 +39,7 @@ function makeCtx(): PipelineContext {
     logger,
     requestId: 'req-1',
     mcpCallCount: 0,
+    iterations: 0,
     abortSignal: new AbortController().signal,
   };
   return {

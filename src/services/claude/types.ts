@@ -49,6 +49,7 @@ export interface OrchestrationContext {
   logger: RequestLogger;
   requestId: string;
   mcpCallCount: number;
+  iterations: number;
   abortSignal: AbortSignal;
 }
 
