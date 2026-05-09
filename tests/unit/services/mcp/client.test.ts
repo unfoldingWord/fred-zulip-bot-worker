@@ -134,4 +134,27 @@ describe('sendJsonRpc', () => {
     expect(result.error).toBeDefined();
     expect(result.error?.message).toBe('Timeout');
   });
+
+  it('returns timeout immediately when parent signal is already aborted', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+
+    const parent = new AbortController();
+    parent.abort();
+
+    const result = await sendJsonRpc({
+      url: 'https://mcp.test/rpc',
+      method: 'tools/call',
+      params: {},
+      token: 'tok',
+      logger,
+      timeoutMs: 60000,
+      signal: parent.signal,
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toBe('Timeout');
+    // fetch should never have been called
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -24,10 +24,38 @@ export async function sendJsonRpc(options: JsonRpcOptions): Promise<JsonRpcRespo
     id: Date.now(),
   };
 
+  if (options.signal?.aborted) {
+    logger.error('mcp_request_failed', { url, method, error: 'Timeout', timeout: true });
+    return buildErrorResponse(request.id, -1, 'Timeout');
+  }
+
+  return executeRequest({
+    url,
+    method,
+    request,
+    token,
+    logger,
+    timeoutMs,
+    parentSignal: options.signal,
+  });
+}
+
+interface ExecuteRequestArgs {
+  url: string;
+  method: string;
+  request: JsonRpcRequest;
+  token: string;
+  logger: RequestLogger;
+  timeoutMs: number;
+  parentSignal?: AbortSignal | undefined;
+}
+
+async function executeRequest(args: ExecuteRequestArgs): Promise<JsonRpcResponse> {
+  const { url, method, request, token, logger, timeoutMs, parentSignal } = args;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const onParentAbort = () => controller.abort();
-  options.signal?.addEventListener('abort', onParentAbort);
+  parentSignal?.addEventListener('abort', onParentAbort);
 
   try {
     const response = await fetch(url, {
@@ -52,7 +80,7 @@ export async function sendJsonRpc(options: JsonRpcOptions): Promise<JsonRpcRespo
     return buildErrorResponse(request.id, -1, isAbort ? 'Timeout' : String(e));
   } finally {
     clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', onParentAbort);
+    parentSignal?.removeEventListener('abort', onParentAbort);
   }
 }
 
