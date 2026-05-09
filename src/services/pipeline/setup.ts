@@ -37,6 +37,7 @@ export function createPipelineContext(
     logger,
     requestId,
     mcpCallCount: 0,
+    iterations: 0,
     abortSignal,
   };
 

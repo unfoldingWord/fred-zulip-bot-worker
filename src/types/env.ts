@@ -2,6 +2,7 @@ export interface Env {
   // Vars (set in wrangler.toml)
   ENVIRONMENT: string;
   MAX_ORCHESTRATION_ITERATIONS?: string;
+  ORCHESTRATION_TIMEOUT_MS?: string;
   CODE_EXEC_TIMEOUT_MS?: string;
   CODE_EXEC_MEMORY_LIMIT_BYTES?: string;
   CODE_EXEC_STACK_SIZE_BYTES?: string;

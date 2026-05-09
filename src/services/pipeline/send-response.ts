@@ -110,9 +110,11 @@ export async function sendErrorMessage(
   payload: ZulipWebhookPayload,
   botEmail: string,
   logger: RequestLogger,
-  detail?: string
+  options?: { detail?: string; text?: string }
 ): Promise<{ delivered: boolean }> {
-  const text = detail ? `${FALLBACK_ERROR_TEXT} (${detail})` : FALLBACK_ERROR_TEXT;
+  const text =
+    options?.text ??
+    (options?.detail ? `${FALLBACK_ERROR_TEXT} (${options.detail})` : FALLBACK_ERROR_TEXT);
   try {
     await sendResponse(client, payload, botEmail, text, logger);
     return { delivered: true };

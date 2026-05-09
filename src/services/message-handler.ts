@@ -2,6 +2,7 @@ import type { Env } from '../types/env.js';
 import type { ZulipWebhookPayload } from './zulip/types.js';
 import type { RequestLogger } from '../utils/logger.js';
 import type { PipelineContext } from './pipeline/setup.js';
+import type { OrchestrationContext } from './claude/types.js';
 import { ZulipClient } from './zulip/client.js';
 import { createPipelineContext } from './pipeline/setup.js';
 import { prepareOrchestrationInputs } from './pipeline/prepare-context.js';
@@ -11,34 +12,61 @@ import { buildSystemPrompt } from './claude/system-prompt.js';
 import { buildToolDefinitions } from './claude/tools.js';
 import { generateToolCatalogMarkdown } from './mcp/catalog.js';
 import { createRequestLogger } from '../utils/logger.js';
+import { parseIntEnvVar } from '../utils/config.js';
 
-// Wall-clock backstop for orchestration inside the FredDO. Set well below
-// the configured 300s CPU cap so the AbortController fires first and the
-// catch path has slack (~30s) to post a Zulip error reply before the
-// runtime kills the invocation. #13 will replace this with a proper
-// watchdog (env-configurable, dedicated timeout-reply text, log signal).
-const ORCHESTRATION_TIMEOUT_MS = 270000;
+const DEFAULT_TIMEOUT_MS = 270000;
+
+interface FailureContext {
+  env: Env;
+  payload: ZulipWebhookPayload;
+  logger: RequestLogger;
+  client: ZulipClient | null;
+  requestId: string;
+  startMs: number;
+  orchestrationCtx?: OrchestrationContext | undefined;
+}
 
 export async function processFredMessage(
   payload: ZulipWebhookPayload,
   env: Env,
   requestId: string = crypto.randomUUID()
 ): Promise<void> {
+  const startMs = Date.now();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ORCHESTRATION_TIMEOUT_MS);
   // Bootstrap logger covers the small window before pipeline-context setup
   // succeeds; createPipelineContext makes its own logger that we use once
   // available.
   let logger: RequestLogger = createRequestLogger(requestId);
+  const timeoutMs = parseIntEnvVar(
+    env.ORCHESTRATION_TIMEOUT_MS,
+    'ORCHESTRATION_TIMEOUT_MS',
+    DEFAULT_TIMEOUT_MS,
+    logger
+  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let client: ZulipClient | null = null;
+  let ctx: PipelineContext | undefined;
 
   try {
-    const ctx = createPipelineContext(payload, env, controller.signal, requestId);
+    ctx = createPipelineContext(payload, env, controller.signal, requestId);
     logger = ctx.logger;
     client = ctx.client;
     await runPipeline(ctx, payload, env);
   } catch (e) {
-    await handleProcessingFailure(e, env, payload, logger, client);
+    const fCtx: FailureContext = {
+      env,
+      payload,
+      logger,
+      client,
+      requestId,
+      startMs,
+      orchestrationCtx: ctx?.orchestrationCtx,
+    };
+    if (controller.signal.aborted) {
+      await handleWatchdogTimeout(e, fCtx);
+    } else {
+      await handleUncaughtThrow(e, fCtx);
+    }
   } finally {
     clearTimeout(timeout);
     if (client) {
@@ -82,7 +110,9 @@ async function runPipeline(
       total_input_tokens: result.totalInputTokens,
       total_output_tokens: result.totalOutputTokens,
     });
-    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, 'no response generated');
+    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, {
+      detail: 'no response generated',
+    });
     return;
   }
 
@@ -95,25 +125,48 @@ async function runPipeline(
   });
 }
 
-async function handleProcessingFailure(
-  error: unknown,
-  env: Env,
-  payload: ZulipWebhookPayload,
-  logger: RequestLogger,
-  client: ZulipClient | null
-): Promise<void> {
-  logger.error('message_processing_error', {
+function errorFields(error: unknown) {
+  return {
     error: error instanceof Error ? error.message : String(error),
     error_name: error instanceof Error ? error.name : 'Unknown',
+  };
+}
+
+async function handleWatchdogTimeout(error: unknown, ctx: FailureContext): Promise<void> {
+  const { env, payload, logger, requestId, startMs, orchestrationCtx } = ctx;
+  logger.error('watchdog_fired', {
+    iterations: orchestrationCtx?.iterations ?? 0,
+    elapsed_ms: Date.now() - startMs,
+    ...errorFields(error),
+  });
+  const text =
+    'This question hit my processing budget. Try a narrower version, ' +
+    `or ask me to break it into pieces. Request ID: \`${requestId}\`.`;
+  await trySendError(ctx.client ?? buildFallbackClient(env), payload, env, logger, { text });
+}
+
+async function handleUncaughtThrow(error: unknown, ctx: FailureContext): Promise<void> {
+  const { env, payload, logger, client, requestId, orchestrationCtx } = ctx;
+  logger.error('orchestration_uncaught_throw', {
+    iterations: orchestrationCtx?.iterations ?? 0,
     stage: client ? 'pipeline' : 'setup',
+    ...errorFields(error),
   });
   const errorClient = client ?? buildFallbackClient(env);
-  // sendErrorMessage swallows its own throws and reports via
-  // error_message_send_failed_fatal, but we still wrap defensively so a
-  // failure in client construction or anywhere else here cannot bubble out
-  // of handleMessage as an unhandled rejection in waitUntil.
+  await trySendError(errorClient, payload, env, logger, {
+    detail: `Request ID: ${requestId}`,
+  });
+}
+
+async function trySendError(
+  client: ZulipClient,
+  payload: ZulipWebhookPayload,
+  env: Env,
+  logger: RequestLogger,
+  options: { detail?: string; text?: string }
+): Promise<void> {
   try {
-    await sendErrorMessage(errorClient, payload, env.ZULIP_BOT_EMAIL, logger);
+    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, options);
   } catch (sendErr) {
     logger.error('error_handler_unexpected_throw', {
       error: sendErr instanceof Error ? sendErr.message : String(sendErr),
