@@ -9,7 +9,7 @@ export async function callTool(
   toolName: string,
   args: unknown,
   logger: RequestLogger,
-  timeoutMs: number = 30000
+  options?: { timeoutMs?: number; signal?: AbortSignal }
 ): Promise<MCPToolCallResult> {
   const startMs = Date.now();
   logger.log('tool_call_start', {
@@ -24,7 +24,8 @@ export async function callTool(
     params: { name: toolName, arguments: args },
     token: config.authToken,
     logger,
-    timeoutMs,
+    timeoutMs: options?.timeoutMs ?? 30000,
+    signal: options?.signal,
   });
 
   const durationMs = Date.now() - startMs;

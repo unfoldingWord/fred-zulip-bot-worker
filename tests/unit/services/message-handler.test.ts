@@ -252,8 +252,7 @@ describe('processFredMessage', () => {
   });
 
   it('includes iteration count in orchestration_uncaught_throw log', async () => {
-    const orchCtx = makeOrchestrationCtx();
-    const { logger } = setupPipelineContext(orchCtx);
+    const { logger } = setupPipelineContext();
     vi.mocked(orchestrate).mockImplementation((opts) => {
       opts.context.iterations = 2;
       return Promise.reject(new Error('crash'));
@@ -265,5 +264,29 @@ describe('processFredMessage', () => {
       'orchestration_uncaught_throw',
       expect.objectContaining({ iterations: 2 })
     );
+  });
+
+  it('fires watchdog even when orchestrate is mid-tool-call', async () => {
+    // Simulates the case where orchestrate is blocked waiting on an MCP
+    // tool call. The abort signal should propagate and cancel the call.
+    const { logger } = setupPipelineContext();
+    vi.mocked(orchestrate).mockImplementation((opts) => {
+      opts.context.iterations = 1;
+      // Simulate a tool call in flight — the abort signal propagates
+      // through sendJsonRpc and cancels the fetch, which surfaces here.
+      return rejectOnAbort(opts.context.abortSignal);
+    });
+
+    const envWithShortTimeout = { ...env, ORCHESTRATION_TIMEOUT_MS: '100' };
+    const promise = processFredMessage(payload, envWithShortTimeout, 'test-req-tool');
+    await vi.advanceTimersByTimeAsync(100);
+    await promise;
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'watchdog_fired',
+      expect.objectContaining({ iterations: 1 })
+    );
+    const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as { text: string };
+    expect(options.text).toContain('test-req-tool');
   });
 });

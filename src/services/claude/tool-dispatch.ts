@@ -43,7 +43,9 @@ async function dispatchMCPToolCall(
   }
 
   ctx.mcpCallCount++;
-  const result = await callTool(mcpConfig, toolName, toolInput, logger);
+  const result = await callTool(mcpConfig, toolName, toolInput, logger, {
+    signal: ctx.abortSignal,
+  });
 
   if (result.isError) {
     healthTracker.recordFailure(logger);

@@ -10,6 +10,7 @@ export interface JsonRpcOptions {
   token: string;
   logger: RequestLogger;
   timeoutMs?: number;
+  signal?: AbortSignal | undefined;
 }
 
 export async function sendJsonRpc(options: JsonRpcOptions): Promise<JsonRpcResponse> {
@@ -25,6 +26,8 @@ export async function sendJsonRpc(options: JsonRpcOptions): Promise<JsonRpcRespo
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const onParentAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onParentAbort);
 
   try {
     const response = await fetch(url, {
@@ -49,6 +52,7 @@ export async function sendJsonRpc(options: JsonRpcOptions): Promise<JsonRpcRespo
     return buildErrorResponse(request.id, -1, isAbort ? 'Timeout' : String(e));
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onParentAbort);
   }
 }
 
