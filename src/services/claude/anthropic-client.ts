@@ -39,15 +39,34 @@ export interface CallClaudeParams {
 /**
  * Injectable clock seam so tests resolve backoff delays instantly and control the
  * jitter/elapsed-time inputs deterministically. Production uses {@link REAL_CLOCK}.
+ *
+ * `sleep` takes the orchestration abort signal so a backoff wait rejects the instant
+ * the watchdog fires — otherwise a long `Retry-After` could park the pipeline past
+ * `ORCHESTRATION_TIMEOUT_MS`, delaying the timeout reply and cleanup (PR #24 review).
  */
 export interface RetryClock {
-  sleep(ms: number): Promise<void>;
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
   now(): number;
   random(): number;
 }
 
 export const REAL_CLOCK: RetryClock = {
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep: (ms, signal) =>
+    new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true }
+      );
+    }),
   now: () => Date.now(),
   random: () => Math.random(),
 };
@@ -235,8 +254,10 @@ async function fetchAnthropicWithRetry(
     if ('response' in outcome) return outcome.response;
 
     // settleFailedAttempt throws on a terminal failure; otherwise returns the backoff delay.
+    // Pass the signal so the wait rejects immediately if the watchdog aborts mid-backoff.
     await clock.sleep(
-      await settleFailedAttempt(attempt, outcome.failure, overallStart, clock, logger)
+      await settleFailedAttempt(attempt, outcome.failure, overallStart, clock, logger),
+      signal
     );
   }
 

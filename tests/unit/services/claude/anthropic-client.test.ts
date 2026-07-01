@@ -160,7 +160,7 @@ describe('callClaude retry behavior', () => {
 
     await callClaude(makeParams(), clock);
 
-    expect(clock.sleep).toHaveBeenCalledWith(10_000);
+    expect(clock.sleep).toHaveBeenCalledWith(10_000, undefined);
     expect(logger.warn).toHaveBeenCalledWith(
       'claude_api_retry',
       expect.objectContaining({ retry_after_ms: 10_000, delay_ms: 10_000 })
@@ -236,6 +236,19 @@ describe('callClaude retry behavior', () => {
       expect.objectContaining({ attempt: 1, network_error: 'network down' })
     );
   });
+});
+
+describe('callClaude abort handling', () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
 
   it('does not retry a deliberate abort and propagates it', async () => {
     const abortErr = Object.assign(new Error('Aborted'), { name: 'AbortError' });
@@ -263,5 +276,39 @@ describe('callClaude retry behavior', () => {
       callClaude(makeParams({ signal: controller.signal }), clock)
     ).rejects.toHaveProperty('name', 'AbortError');
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects the backoff wait immediately when the watchdog aborts mid-delay', async () => {
+    const controller = new AbortController();
+    // Always 429 with a long Retry-After: without abort-awareness the sleep would
+    // park the pipeline for ~120s past the orchestration timeout.
+    globalThis.fetch = vi.fn().mockResolvedValue(errorResponse(429, { 'retry-after': '120' }));
+
+    // A sleep that settles only via the abort signal, so we can prove the wait ends
+    // the instant the watchdog fires rather than running the timer to completion.
+    let sleepEntered!: () => void;
+    const parkedInSleep = new Promise<void>((r) => (sleepEntered = r));
+    const clock = makeClock({
+      sleep: (_ms: number, signal?: AbortSignal) =>
+        new Promise<void>((_resolve, reject) => {
+          if (signal?.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+          }
+          signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          );
+          sleepEntered();
+        }),
+    });
+
+    const promise = callClaude(makeParams({ signal: controller.signal }), clock);
+    await parkedInSleep; // execution is now parked in the backoff wait
+    controller.abort(); // watchdog fires mid-backoff
+
+    await expect(promise).rejects.toHaveProperty('name', 'AbortError');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1); // no retry after abort
   });
 });
