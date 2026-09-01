@@ -109,10 +109,15 @@ async function runPipeline(
       iterations: result.iterations,
       total_input_tokens: result.totalInputTokens,
       total_output_tokens: result.totalOutputTokens,
+      stop_reason: result.stopReason,
+      truncated: result.truncated === true,
     });
-    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, {
-      detail: 'no response generated',
-    });
+    // A run cut off by the output ceiling is not an error and "try again" is bad advice for a
+    // deterministic length wall — say what actually happened instead of the generic failure text.
+    const options = result.truncated
+      ? { text: truncationMessage(ctx.requestId) }
+      : { detail: 'no response generated' };
+    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, options);
     return;
   }
 
@@ -122,7 +127,20 @@ async function runPipeline(
     iterations: result.iterations,
     total_input_tokens: result.totalInputTokens,
     total_output_tokens: result.totalOutputTokens,
+    stop_reason: result.stopReason,
+    truncated: result.truncated === true,
   });
+}
+
+/**
+ * User-facing copy for a run that hit the model's output ceiling. Deliberately not phrased as
+ * an error: nothing failed, the answer was simply longer than one turn could hold.
+ */
+function truncationMessage(requestId: string): string {
+  return (
+    'I ran out of room composing that answer. Try asking for a narrower slice, ' +
+    `or ask me to break it into pieces. Request ID: \`${requestId}\`.`
+  );
 }
 
 function errorFields(error: unknown) {

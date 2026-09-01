@@ -66,6 +66,14 @@ export interface OrchestrationResult {
   iterations: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  /** `stop_reason` of the turn that ended the loop; absent when the iteration cap was hit. */
+  stopReason?: AnthropicMessage['stop_reason'];
+  /**
+   * True when the run ended on `max_tokens` — the model was cut off by the output ceiling
+   * rather than finishing. Lets the caller say so plainly instead of showing a generic error
+   * (issue: blank replies on long reports).
+   */
+  truncated?: boolean;
 }
 
 export type MessageParam =

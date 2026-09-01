@@ -289,4 +289,53 @@ describe('processFredMessage', () => {
     const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as { text: string };
     expect(options.text).toContain('test-req-tool');
   });
+
+  // A run cut off by the output ceiling must not reuse the generic failure text — that is
+  // what Dane saw on the Transform Iran reports, and "try again" is wrong advice for it.
+  it('sends a truncation reply, not the generic error, when the output ceiling is hit', async () => {
+    const { logger } = setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: '',
+      iterations: 2,
+      totalInputTokens: 100,
+      totalOutputTokens: 4096,
+      stopReason: 'max_tokens',
+      truncated: true,
+    });
+
+    await processFredMessage(payload, env, 'test-req-trunc');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'orchestration_empty_response',
+      expect.objectContaining({ stop_reason: 'max_tokens', truncated: true })
+    );
+
+    const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as {
+      text?: string;
+      detail?: string;
+    };
+    expect(options.detail).toBeUndefined();
+    expect(options.text).toContain('ran out of room');
+    expect(options.text).toContain('test-req-trunc');
+  });
+
+  it('keeps the generic error for an empty response that was not truncated', async () => {
+    setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: '',
+      iterations: 1,
+      totalInputTokens: 100,
+      totalOutputTokens: 10,
+      stopReason: 'end_turn',
+      truncated: false,
+    });
+
+    await processFredMessage(payload, env, 'test-req-empty');
+
+    const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as {
+      text?: string;
+      detail?: string;
+    };
+    expect(options.detail).toBe('no response generated');
+  });
 });
