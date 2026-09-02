@@ -2,11 +2,15 @@ import type { Env } from '../types/env.js';
 import type { ZulipWebhookPayload } from './zulip/types.js';
 import type { RequestLogger } from '../utils/logger.js';
 import type { PipelineContext } from './pipeline/setup.js';
-import type { OrchestrationContext } from './claude/types.js';
+import type { OrchestrationContext, OrchestrationResult } from './claude/types.js';
 import { ZulipClient } from './zulip/client.js';
 import { createPipelineContext } from './pipeline/setup.js';
 import { prepareOrchestrationInputs } from './pipeline/prepare-context.js';
-import { sendResponse, sendErrorMessage } from './pipeline/send-response.js';
+import {
+  sendResponse,
+  sendErrorMessage,
+  DEFAULT_MAX_MESSAGE_LENGTH,
+} from './pipeline/send-response.js';
 import { orchestrate } from './claude/orchestrator.js';
 import { buildSystemPrompt } from './claude/system-prompt.js';
 import { buildToolDefinitions } from './claude/tools.js';
@@ -105,23 +109,11 @@ async function runPipeline(
   );
 
   if (!result.response || result.response.trim().length === 0) {
-    logger.warn('orchestration_empty_response', {
-      iterations: result.iterations,
-      total_input_tokens: result.totalInputTokens,
-      total_output_tokens: result.totalOutputTokens,
-      stop_reason: result.stopReason,
-      truncated: result.truncated === true,
-    });
-    // A run cut off by the output ceiling is not an error and "try again" is bad advice for a
-    // deterministic length wall — say what actually happened instead of the generic failure text.
-    const options = result.truncated
-      ? { text: truncationMessage(ctx.requestId) }
-      : { detail: 'no response generated' };
-    await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, options);
+    await reportEmptyResponse(ctx, payload, env, result);
     return;
   }
 
-  await sendResponse(client, payload, env.ZULIP_BOT_EMAIL, result.response, logger);
+  await deliverAnswer(ctx, payload, env, result);
   logger.log('request_complete', {
     total_duration_ms: Date.now() - startMs,
     iterations: result.iterations,
@@ -132,6 +124,68 @@ async function runPipeline(
   });
 }
 
+/** Nothing was said at all. Distinguish "cut off before writing" from a genuine blank. */
+async function reportEmptyResponse(
+  ctx: PipelineContext,
+  payload: ZulipWebhookPayload,
+  env: Env,
+  result: OrchestrationResult
+): Promise<void> {
+  const { logger, client } = ctx;
+  logger.warn('orchestration_empty_response', {
+    iterations: result.iterations,
+    total_input_tokens: result.totalInputTokens,
+    total_output_tokens: result.totalOutputTokens,
+    stop_reason: result.stopReason,
+    truncated: result.truncated === true,
+  });
+  // A run cut off by the output ceiling is not an error and "try again" is bad advice for a
+  // deterministic length wall - say what actually happened instead of the generic failure text.
+  const options = result.truncated
+    ? { text: truncationMessage(ctx.requestId) }
+    : { detail: 'no response generated' };
+  await sendErrorMessage(client, payload, env.ZULIP_BOT_EMAIL, logger, options);
+}
+
+/**
+ * Deliver a non-empty answer. Truncation is handled independently of emptiness: a `max_tokens`
+ * stop can end a turn with a text prefix and no tool call, and posting that prefix bare would
+ * present a cut-off report as a finished one, with no way for the reader to tell rows are
+ * missing. Delivery is chunked against Zulip's per-message limit so the transport cannot
+ * silently re-truncate what the model was finally allowed to finish.
+ */
+async function deliverAnswer(
+  ctx: PipelineContext,
+  payload: ZulipWebhookPayload,
+  env: Env,
+  result: OrchestrationResult
+): Promise<void> {
+  const { logger, client } = ctx;
+  const content = result.truncated
+    ? `${result.response}\n\n${truncationNotice(ctx.requestId)}`
+    : result.response;
+
+  if (result.truncated) {
+    logger.warn('response_truncated_notice_appended', {
+      response_length: result.response.length,
+      iterations: result.iterations,
+      total_output_tokens: result.totalOutputTokens,
+    });
+  }
+
+  await sendResponse(
+    { client, payload, botEmail: env.ZULIP_BOT_EMAIL },
+    content,
+    logger,
+    parseIntEnvVar(
+      env.ZULIP_MAX_MESSAGE_LENGTH,
+      'ZULIP_MAX_MESSAGE_LENGTH',
+      DEFAULT_MAX_MESSAGE_LENGTH,
+      logger
+    )
+  );
+}
+
 /**
  * User-facing copy for a run that hit the model's output ceiling. Deliberately not phrased as
  * an error: nothing failed, the answer was simply longer than one turn could hold.
@@ -140,6 +194,19 @@ function truncationMessage(requestId: string): string {
   return (
     'I ran out of room composing that answer. Try asking for a narrower slice, ' +
     `or ask me to break it into pieces. Request ID: \`${requestId}\`.`
+  );
+}
+
+/**
+ * Appended to a partial answer that hit the output ceiling. The empty case gets
+ * `truncationMessage` instead; this one has real content above it to qualify.
+ */
+function truncationNotice(requestId: string): string {
+  return (
+    '---\n' +
+    '\u26a0\ufe0f **This answer is incomplete** \u2014 I hit my output limit while writing it, ' +
+    'so anything below this point is missing. Ask for a narrower slice to see the rest. ' +
+    `Request ID: \`${requestId}\`.`
   );
 }
 

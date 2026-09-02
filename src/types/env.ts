@@ -11,6 +11,7 @@ export interface Env {
   CLAUDE_MODEL?: string;
   CLAUDE_MAX_TOKENS?: string;
   FRED_MCP_URL?: string;
+  ZULIP_MAX_MESSAGE_LENGTH?: string;
 
   // Secrets (set via wrangler secret put)
   ZULIP_BOT_EMAIL: string;
