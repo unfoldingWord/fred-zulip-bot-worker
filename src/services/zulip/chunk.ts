@@ -36,35 +36,71 @@ export function chunkForZulip(content: string, limit: number): string[] {
   return parts.map((part, i) => `*(part ${i + 1}/${parts.length})*\n\n${part}`);
 }
 
-/** Split on line boundaries, keeping fenced code blocks balanced across parts. */
+/**
+ * Split on line boundaries, keeping fenced code blocks balanced across parts.
+ *
+ * Sizing is done against the chunk as it would actually be emitted — including the fence
+ * reopened at the start of a continuation chunk and the fence appended when closing one.
+ * Measuring the rendered form rather than tracking a running counter is what keeps the
+ * limit honest: a long line inside a code block otherwise overshoots by exactly the fence
+ * overhead, which is invisible to a naive character count.
+ */
 function splitLines(content: string, budget: number): string[] {
   const chunks: string[] = [];
   let current: string[] = [];
-  let length = 0;
   // The opening fence line (e.g. '```sql') while inside a code block, else null.
   let openFence: string | null = null;
 
+  /** Length of `lines` as an emitted chunk, counting the closing fence when one is owed. */
+  const rendered = (lines: string[]): number => {
+    const body = lines.join('\n');
+    return openFence ? body.length + 1 + FENCE.length : body.length;
+  };
+
+  /** True when the chunk holds nothing but a reopened fence — flushing it would emit noise. */
+  const isEmpty = (): boolean =>
+    current.length === 0 || (current.length === 1 && current[0] === openFence);
+
   const flush = (reopen: boolean): void => {
     if (current.length === 0) return;
-    const body = current.join('\n');
-    chunks.push(openFence ? `${body}\n${FENCE}` : body);
-    current = [];
-    length = 0;
-    if (reopen && openFence) {
-      current.push(openFence);
-      length = openFence.length + 1;
+    chunks.push(openFence ? `${current.join('\n')}\n${FENCE}` : current.join('\n'));
+    current = reopen && openFence ? [openFence] : [];
+  };
+
+  const push = (piece: string): void => {
+    current.push(piece);
+    if (piece.startsWith(FENCE)) openFence = openFence ? null : piece;
+  };
+
+  const appendLine = (line: string): void => {
+    let remaining = line;
+    for (;;) {
+      if (rendered([...current, remaining]) <= budget) {
+        push(remaining);
+        return;
+      }
+      // Doesn't fit here — try a fresh chunk before resorting to breaking the line.
+      if (!isEmpty()) {
+        flush(true);
+        if (rendered([...current, remaining]) <= budget) {
+          push(remaining);
+          return;
+        }
+      }
+      // Still too long for a whole chunk: take exactly what the remaining room allows.
+      const room = budget - rendered([...current, '']);
+      if (room <= 0) {
+        // Pathological (a fence line alone near the budget); emit rather than spin.
+        push(remaining);
+        return;
+      }
+      push(remaining.slice(0, room));
+      remaining = remaining.slice(room);
+      flush(true);
     }
   };
 
-  for (const line of content.split('\n')) {
-    // A single line longer than the budget still has to be broken somewhere.
-    for (const piece of hardSplit(line, budget)) {
-      if (length + piece.length + 1 > budget && current.length > 0) flush(true);
-      current.push(piece);
-      length += piece.length + 1;
-      if (piece.startsWith(FENCE)) openFence = openFence ? null : piece;
-    }
-  }
+  for (const line of content.split('\n')) appendLine(line);
   flush(false);
 
   return chunks.length > 0 ? chunks : [content];

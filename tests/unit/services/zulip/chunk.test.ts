@@ -78,6 +78,44 @@ describe('chunkForZulip', () => {
     }
   });
 
+  // Regression (PR #26 re-review): reopening a fence added its prefix and the closing fence
+  // on top of an already budget-sized piece, so parts came back at 10,002 for a 10,000 limit.
+  it('keeps every part within the limit when a long line sits inside a fence', () => {
+    const content = '```json\n' + 'x'.repeat(20000) + '\n```';
+    const parts = chunkForZulip(content, 10000);
+
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) {
+      expect(part.length).toBeLessThanOrEqual(10000);
+    }
+    for (const part of parts) {
+      expect((part.match(/```/g) ?? []).length % 2).toBe(0);
+    }
+    // No content lost: every 'x' still accounted for across the parts.
+    const xs = parts.reduce((n, p) => n + (p.match(/x/g) ?? []).length, 0);
+    expect(xs).toBe(20000);
+  });
+
+  it('never exceeds the limit across a range of shapes and limits', () => {
+    const shapes = [
+      '```json\n' + 'x'.repeat(20000) + '\n```',
+      '```\n' + 'y'.repeat(5000) + '\n```',
+      'intro\n\n```sql\n' +
+        Array.from({ length: 400 }, (_, i) => `SELECT ${i};`).join('\n') +
+        '\n```\n\noutro',
+      'z'.repeat(30000),
+      Array.from({ length: 900 }, (_, i) => `${i}. row`).join('\n'),
+    ];
+
+    for (const content of shapes) {
+      for (const limit of [200, 1000, 4000, 10000]) {
+        for (const part of chunkForZulip(content, limit)) {
+          expect(part.length).toBeLessThanOrEqual(limit);
+        }
+      }
+    }
+  });
+
   it('treats a non-positive limit as no limit rather than looping', () => {
     const content = 'anything';
     expect(chunkForZulip(content, 0)).toEqual([content]);
