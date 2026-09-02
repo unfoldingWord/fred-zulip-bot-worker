@@ -31,7 +31,7 @@ export function parseIntEnvVar(
 export function getOrchestrationConfig(env: Env, logger: RequestLogger): OrchestrationConfig {
   return {
     model: env.CLAUDE_MODEL ?? 'claude-sonnet-4-6',
-    maxTokens: parseIntEnvVar(env.CLAUDE_MAX_TOKENS, 'CLAUDE_MAX_TOKENS', 4096, logger),
+    maxTokens: parseIntEnvVar(env.CLAUDE_MAX_TOKENS, 'CLAUDE_MAX_TOKENS', 64000, logger),
     maxIterations: parseIntEnvVar(
       env.MAX_ORCHESTRATION_ITERATIONS,
       'MAX_ORCHESTRATION_ITERATIONS',

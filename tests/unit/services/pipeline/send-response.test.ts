@@ -49,7 +49,11 @@ describe('sendResponse', () => {
     globalThis.fetch = fetchMock;
     const logger = makeLogger();
 
-    await sendResponse(makeClient(), streamPayload, BOT_EMAIL, '   ', logger);
+    await sendResponse(
+      { client: makeClient(), payload: streamPayload, botEmail: BOT_EMAIL },
+      '   ',
+      logger
+    );
 
     expect(logger.warn).toHaveBeenCalledWith('response_empty_substituted', expect.any(Object));
     const body = (fetchMock.mock.calls[0][1] as RequestInit).body as URLSearchParams;
@@ -63,7 +67,11 @@ describe('sendResponse', () => {
     const logger = makeLogger();
 
     await expect(
-      sendResponse(makeClient(), streamPayload, BOT_EMAIL, 'hi', logger)
+      sendResponse(
+        { client: makeClient(), payload: streamPayload, botEmail: BOT_EMAIL },
+        'hi',
+        logger
+      )
     ).rejects.toThrow(/status=400/);
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
@@ -81,7 +89,11 @@ describe('sendResponse', () => {
     globalThis.fetch = fetchMock;
     const logger = makeLogger();
 
-    const promise = sendResponse(makeClient(), streamPayload, BOT_EMAIL, 'hi', logger);
+    const promise = sendResponse(
+      { client: makeClient(), payload: streamPayload, botEmail: BOT_EMAIL },
+      'hi',
+      logger
+    );
     await vi.advanceTimersByTimeAsync(300);
     await promise;
 
@@ -103,7 +115,11 @@ describe('sendResponse', () => {
       .mockResolvedValueOnce(new Response('upstream', { status: 503 }));
     const logger = makeLogger();
 
-    const promise = sendResponse(makeClient(), streamPayload, BOT_EMAIL, 'hi', logger);
+    const promise = sendResponse(
+      { client: makeClient(), payload: streamPayload, botEmail: BOT_EMAIL },
+      'hi',
+      logger
+    );
     const rejection = expect(promise).rejects.toThrow(/first=502 second=503/);
     await vi.advanceTimersByTimeAsync(300);
     await rejection;
@@ -122,7 +138,11 @@ describe('sendResponse', () => {
     globalThis.fetch = fetchMock;
     const logger = makeLogger();
 
-    const promise = sendResponse(makeClient(), streamPayload, BOT_EMAIL, 'hi', logger);
+    const promise = sendResponse(
+      { client: makeClient(), payload: streamPayload, botEmail: BOT_EMAIL },
+      'hi',
+      logger
+    );
     await vi.advanceTimersByTimeAsync(300);
     await promise;
 

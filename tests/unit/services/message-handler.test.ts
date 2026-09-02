@@ -15,6 +15,7 @@ vi.mock('../../../src/services/claude/orchestrator.js', () => ({
 vi.mock('../../../src/services/pipeline/send-response.js', () => ({
   sendResponse: vi.fn().mockResolvedValue(undefined),
   sendErrorMessage: vi.fn().mockResolvedValue({ delivered: true }),
+  DEFAULT_MAX_MESSAGE_LENGTH: 10000,
 }));
 vi.mock('../../../src/services/pipeline/prepare-context.js', () => ({
   prepareOrchestrationInputs: vi.fn().mockResolvedValue({
@@ -37,7 +38,7 @@ vi.mock('../../../src/services/mcp/catalog.js', () => ({
 import { processFredMessage } from '../../../src/services/message-handler.js';
 import { createPipelineContext } from '../../../src/services/pipeline/setup.js';
 import { orchestrate } from '../../../src/services/claude/orchestrator.js';
-import { sendErrorMessage } from '../../../src/services/pipeline/send-response.js';
+import { sendResponse, sendErrorMessage } from '../../../src/services/pipeline/send-response.js';
 
 const BOT_EMAIL = 'bot@example.com';
 
@@ -156,16 +157,16 @@ function setupPipelineContext(orchestrationCtxOverrides?: Partial<OrchestrationC
   };
 }
 
-describe('processFredMessage', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.clearAllMocks();
-  });
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+});
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+afterEach(() => {
+  vi.useRealTimers();
+});
 
+describe('processFredMessage — failure paths', () => {
   it('sends error reply with request ID on uncaught throw', async () => {
     const { logger } = setupPipelineContext();
     vi.mocked(orchestrate).mockRejectedValue(new Error('something broke'));
@@ -288,5 +289,123 @@ describe('processFredMessage', () => {
     );
     const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as { text: string };
     expect(options.text).toContain('test-req-tool');
+  });
+});
+
+describe('processFredMessage — response delivery', () => {
+  // A run cut off by the output ceiling must not reuse the generic failure text — that is
+  // what Dane saw on the Transform Iran reports, and "try again" is wrong advice for it.
+  it('sends a truncation reply, not the generic error, when the output ceiling is hit', async () => {
+    const { logger } = setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: '',
+      iterations: 2,
+      totalInputTokens: 100,
+      totalOutputTokens: 4096,
+      stopReason: 'max_tokens',
+      truncated: true,
+    });
+
+    await processFredMessage(payload, env, 'test-req-trunc');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'orchestration_empty_response',
+      expect.objectContaining({ stop_reason: 'max_tokens', truncated: true })
+    );
+
+    const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as {
+      text?: string;
+      detail?: string;
+    };
+    expect(options.detail).toBeUndefined();
+    expect(options.text).toContain('ran out of room');
+    expect(options.text).toContain('test-req-trunc');
+  });
+
+  // A max_tokens stop can end a turn with a non-empty prefix and no tool call. Posting that
+  // bare would present a cut-off report as finished, with no signal that rows are missing.
+  it('appends a truncation notice to a partial answer instead of posting it as complete', async () => {
+    const { logger } = setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: 'Overall Product Status\n- OBS: 12 complete',
+      iterations: 3,
+      totalInputTokens: 100,
+      totalOutputTokens: 4096,
+      stopReason: 'max_tokens',
+      truncated: true,
+    });
+
+    await processFredMessage(payload, env, 'test-req-partial');
+
+    // Delivered as a normal response, not routed to the error path.
+    expect(vi.mocked(sendErrorMessage)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendResponse)).toHaveBeenCalled();
+
+    const sent = vi.mocked(sendResponse).mock.calls[0][1] as string;
+    expect(sent).toContain('Overall Product Status');
+    expect(sent).toContain('incomplete');
+    expect(sent).toContain('test-req-partial');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'response_truncated_notice_appended',
+      expect.objectContaining({ total_output_tokens: 4096 })
+    );
+  });
+
+  it('posts a complete answer unchanged, with no truncation notice', async () => {
+    setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: 'Here is the full report.',
+      iterations: 2,
+      totalInputTokens: 100,
+      totalOutputTokens: 500,
+      stopReason: 'end_turn',
+      truncated: false,
+    });
+
+    await processFredMessage(payload, env, 'test-req-ok');
+
+    const sent = vi.mocked(sendResponse).mock.calls[0][1] as string;
+    expect(sent).toBe('Here is the full report.');
+    expect(sent).not.toContain('incomplete');
+  });
+
+  it('passes the Zulip message-length limit through to sendResponse', async () => {
+    setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: 'Short answer.',
+      iterations: 1,
+      totalInputTokens: 10,
+      totalOutputTokens: 10,
+      stopReason: 'end_turn',
+      truncated: false,
+    });
+
+    await processFredMessage(
+      { ...payload },
+      { ...env, ZULIP_MAX_MESSAGE_LENGTH: '4000' },
+      'req-lim'
+    );
+
+    expect(vi.mocked(sendResponse).mock.calls[0][3]).toBe(4000);
+  });
+
+  it('keeps the generic error for an empty response that was not truncated', async () => {
+    setupPipelineContext();
+    vi.mocked(orchestrate).mockResolvedValue({
+      response: '',
+      iterations: 1,
+      totalInputTokens: 100,
+      totalOutputTokens: 10,
+      stopReason: 'end_turn',
+      truncated: false,
+    });
+
+    await processFredMessage(payload, env, 'test-req-empty');
+
+    const options = vi.mocked(sendErrorMessage).mock.calls[0][4] as {
+      text?: string;
+      detail?: string;
+    };
+    expect(options.detail).toBe('no response generated');
   });
 });

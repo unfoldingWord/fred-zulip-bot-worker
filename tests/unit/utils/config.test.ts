@@ -49,7 +49,7 @@ describe('getOrchestrationConfig', () => {
     const config = getOrchestrationConfig(env, logger);
 
     expect(config.model).toBe('claude-sonnet-4-6');
-    expect(config.maxTokens).toBe(4096);
+    expect(config.maxTokens).toBe(64000);
     expect(config.maxIterations).toBe(25);
     expect(config.codeExecTimeoutMs).toBe(30000);
     expect(config.maxMcpCallsPerExecution).toBe(10);
